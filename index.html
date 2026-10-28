@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Squard War - Official Tournament Portal | squardwar.site</title>
+    <meta name="description" content="Squard War (squardwar.site) official squad tournament seat booking, live room access, and instant rewards platform." />
+    <meta property="og:title" content="Squard War - Official Tournament Portal | squardwar.site" />
+    <meta property="og:description" content="Squard War (squardwar.site) official squad tournament seat booking, live room access, and instant rewards platform." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://squardwar.site" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#f59e0b" />
+    <meta name="application-name" content="Squard War" />
+    <meta name="apple-mobile-web-app-title" content="Squard War" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Runtime constraint: HMR is disabled in AI Studio cloud preview. Ignore Vite HMR WebSocket errors.
+      window.addEventListener('error', function(event) {
+        if (
+          (event.filename && event.filename.includes('@vite/client')) ||
+          (event.message && (event.message.includes('WebSocket') || event.message.includes('ws:')))
+        ) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(event) {
+        var reason = String(event.reason || '');
+        if (reason.includes('WebSocket') || reason.includes('@vite/client') || reason.includes('HMR')) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      }, true);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

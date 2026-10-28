@@ -1,0 +1,25 @@
+{
+  "rules": {
+    "tournament": {
+      ".read": true,
+      ".write": "auth != null && auth.token.admin == true"
+    },
+    "rewardSettings": {
+      ".read": true,
+      ".write": "auth != null && auth.token.admin == true"
+    },
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null && (auth.uid == $uid || auth.token.admin == true)"
+      }
+    },
+    "CashOutRequests": {
+      ".read": "auth != null",
+      "$requestId": {
+        ".read": "auth != null && (data.child('userUid').val() == auth.uid || auth.token.admin == true)",
+        ".write": "auth != null && auth.token.admin == true"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Squard War - Esports Tournament Platform",
+  "short_name": "Squard War",
+  "description": "Squard War official squad tournament seat booking, live room access, and instant rewards platform.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060a12",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "/images/avatars/pubg_avatar_golden_1792656009701.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/avatars/pubg_avatar_golden_1792656009701.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "PUBG Arena - Tournament Seat Booking & Match Room Portal",
+  "description": "Professional PUBG Mobile & Free Fire tournament seat booking platform with real-time squad reservation, secure payment verification, dynamic room credentials countdown, and live match results.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

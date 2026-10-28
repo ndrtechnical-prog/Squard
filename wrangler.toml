@@ -1,0 +1,25 @@
+name = "pubg-arena-tournament"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+[vars]
+ENVIRONMENT = "production"
+DEFAULT_GAME = "PUBG"
+ENABLE_MOCK_UID_VALIDATOR = "false" # Set true if external PUBG API is not yet wired
+SESSION_COOKIE_NAME = "pubg_admin_token"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "pubg_tournament_db"
+database_id = "your-d1-database-id-here" # Generated via `npx wrangler d1 create pubg_tournament_db`
+
+# Cloudflare R2 Private Bucket Binding for Payment Proofs
+[[r2_buckets]]
+binding = "PAYMENT_BUCKET"
+bucket_name = "pubg-tournament-proofs" # Generated via `npx wrangler r2 bucket create pubg-tournament-proofs`
+
+# Secrets to be configured via:
+# `npx wrangler secret put ADMIN_SECRET`
+# `npx wrangler secret put JWT_SECRET`
+# `npx wrangler secret put PUBG_API_KEY` (optional for live PUBG Global UID verification)
