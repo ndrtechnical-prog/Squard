@@ -5,7 +5,14 @@ export const onRequestGet = async (context: EventContext<Env>) => {
     const { env } = context;
 
     if (!env.DB) {
-      return new Response(JSON.stringify({ error: 'D1 binding not configured' }), {
+      const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json');
+      if (fbRes.ok) {
+        const tournament = await fbRes.json();
+        return new Response(JSON.stringify({ tournament, paymentAccounts: [] }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify({ error: 'Database not available' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });

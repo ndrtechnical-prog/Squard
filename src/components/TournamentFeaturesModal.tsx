@@ -164,9 +164,12 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
     try {
       const res = await fetch('/api/reward/settings');
       if (res.ok) {
-        const data = await res.json();
-        if (data.settings) {
-          setRewardSettings(data.settings);
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          const data = JSON.parse(text);
+          if (data.settings) {
+            setRewardSettings(data.settings);
+          }
         }
       }
     } catch (e) {
@@ -299,9 +302,15 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
         })
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          data = JSON.parse(text);
+        }
+      } catch {}
 
-      if (res.ok && data.success) {
+      if (res.ok && data && data.success) {
         setShowConfirmModal(false);
         setIsCashOutOpen(false);
         setWithdrawalAmount('');

@@ -94,9 +94,20 @@ export default function App() {
   const fetchActiveNotice = useCallback(async () => {
     try {
       const res = await fetch('/api/notices');
-      const data = await res.json();
-      if (data?.success && data?.notice) {
-        setActiveNotice(data.notice);
+      const text = await res.text();
+      if (text && text.trim().startsWith('{')) {
+        const data = JSON.parse(text);
+        if (data?.success && data?.notice) {
+          setActiveNotice(data.notice);
+          return;
+        }
+      }
+      const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/Notice.json');
+      if (fbRes.ok) {
+        const fbText = await fbRes.text();
+        if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+          setActiveNotice(JSON.parse(fbText));
+        }
       }
     } catch {}
   }, []);
@@ -129,28 +140,45 @@ export default function App() {
     const cleanUid = uid.trim();
     if (!cleanUid) return;
     try {
-      const res = await fetch('/api/user/sync-pubg-id', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          pubgUid: cleanUid, 
-          playerName: name || undefined, 
-          pin: pin || undefined 
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.user) {
-          setSavedPubgId(cleanUid);
-          localStorage.setItem('pubg_saved_uid', cleanUid);
-          if (data.user.playerName) {
-            setSavedPlayerName(data.user.playerName);
-            localStorage.setItem('pubg_saved_name', data.user.playerName);
+      let data: any = null;
+      try {
+        const res = await fetch('/api/user/sync-pubg-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            pubgUid: cleanUid, 
+            playerName: name || undefined, 
+            pin: pin || undefined 
+          })
+        });
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().startsWith('{')) {
+            data = JSON.parse(text);
           }
-          if (typeof data.user.balance === 'number') {
-            setUserBalance(data.user.balance);
-            saveUserBalance(data.user.balance);
+        }
+      } catch {}
+
+      if (!data || !data.success) {
+        const fbRes = await fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/users/${encodeURIComponent(cleanUid)}.json`);
+        if (fbRes.ok) {
+          const fbText = await fbRes.text();
+          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+            data = { success: true, user: JSON.parse(fbText) };
           }
+        }
+      }
+
+      if (data && data.success && data.user) {
+        setSavedPubgId(cleanUid);
+        localStorage.setItem('pubg_saved_uid', cleanUid);
+        if (data.user.playerName) {
+          setSavedPlayerName(data.user.playerName);
+          localStorage.setItem('pubg_saved_name', data.user.playerName);
+        }
+        if (typeof data.user.balance === 'number') {
+          setUserBalance(data.user.balance);
+          saveUserBalance(data.user.balance);
         }
       }
     } catch (err) {
@@ -206,15 +234,92 @@ export default function App() {
     const cleanPin = pin.trim();
 
     try {
-      const res = await fetch('/api/user/pin-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pubgUid: cleanUid, playerName: cleanName, pin: cleanPin })
-      });
+      let data: any = null;
+      let authenticated = false;
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Authentication failed. Please verify your PIN.' };
+      // 1. Try local/edge API endpoint with safe text parsing
+      try {
+        const res = await fetch('/api/user/pin-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pubgUid: cleanUid, playerName: cleanName, pin: cleanPin })
+        });
+
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          const resData = JSON.parse(text);
+          if (res.ok && resData.success) {
+            data = resData;
+            authenticated = true;
+          } else if (res.status === 401 && resData.error) {
+            return { success: false, error: resData.error };
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API call failed, proceeding to direct Firebase RTDB:', apiErr);
+      }
+
+      // 2. Direct Firebase RTDB fallback if API endpoint returned 404/non-json or failed
+      if (!authenticated) {
+        const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+        const fbRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`);
+        let fbUser: any = null;
+        if (fbRes.ok) {
+          const fbText = await fbRes.text();
+          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+            fbUser = JSON.parse(fbText);
+          }
+        }
+
+        if (fbUser) {
+          if (fbUser.pin && fbUser.pin.trim() !== '') {
+            if (fbUser.pin !== cleanPin) {
+              return { success: false, error: 'Incorrect 4-digit PIN! Please enter the correct PIN for this PUBG ID.' };
+            }
+          } else {
+            fbUser.pin = cleanPin;
+            fbUser.password = cleanPin;
+          }
+
+          if (cleanName) {
+            fbUser.playerName = cleanName;
+          }
+          fbUser.lastLogin = Date.now();
+
+          await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fbUser)
+          });
+        } else {
+          fbUser = {
+            uid: cleanUid,
+            pubgUid: cleanUid,
+            playerName: cleanName || `Player_${cleanUid.slice(-4)}`,
+            pin: cleanPin,
+            password: cleanPin,
+            balance: 0,
+            createdAt: Date.now(),
+            lastLogin: Date.now()
+          };
+
+          await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fbUser)
+          });
+        }
+
+        data = {
+          success: true,
+          user: {
+            uid: fbUser.uid,
+            pubgUid: fbUser.pubgUid,
+            playerName: fbUser.playerName,
+            pin: fbUser.pin,
+            balance: typeof fbUser.balance === 'number' ? fbUser.balance : 0
+          }
+        };
       }
 
       const activeName = data.user?.playerName || cleanName;
@@ -318,15 +423,33 @@ export default function App() {
       const res = await fetch('/api/tournament', { signal: controller.signal });
       clearTimeout(timeoutId);
 
+      let data: any = null;
       if (res.ok) {
-        const data = await res.json();
-        if (data.tournament && Array.isArray(data.tournament.teams) && data.tournament.teams.length >= 25) {
-          setTournament(data.tournament);
-          saveStoredTournament(data.tournament);
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          data = JSON.parse(text);
         }
-        if (data.paymentAccounts && data.paymentAccounts.length > 0) {
-          setPaymentAccounts(data.paymentAccounts);
+      }
+
+      if (data && data.tournament && Array.isArray(data.tournament.teams) && data.tournament.teams.length >= 25) {
+        setTournament(data.tournament);
+        saveStoredTournament(data.tournament);
+      } else {
+        const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json');
+        if (fbRes.ok) {
+          const fbText = await fbRes.text();
+          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+            const fbData = JSON.parse(fbText);
+            if (fbData && Array.isArray(fbData.teams) && fbData.teams.length >= 25) {
+              setTournament(fbData);
+              saveStoredTournament(fbData);
+            }
+          }
         }
+      }
+
+      if (data?.paymentAccounts && data.paymentAccounts.length > 0) {
+        setPaymentAccounts(data.paymentAccounts);
       }
     } catch {
       // Graceful fallback to local stored tournament
@@ -345,13 +468,36 @@ export default function App() {
     if (!targetUid) return;
 
     try {
-      const res = await fetch(`/api/user/balance?pubgUid=${encodeURIComponent(targetUid)}&t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && typeof data.balance === 'number') {
-          setUserBalance(data.balance);
-          saveUserBalance(data.balance);
+      let balanceFetched: number | null = null;
+      try {
+        const res = await fetch(`/api/user/balance?pubgUid=${encodeURIComponent(targetUid)}&t=${Date.now()}`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().startsWith('{')) {
+            const data = JSON.parse(text);
+            if (data.success && typeof data.balance === 'number') {
+              balanceFetched = data.balance;
+            }
+          }
         }
+      } catch {}
+
+      if (balanceFetched === null) {
+        const fbRes = await fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/users/${encodeURIComponent(targetUid)}.json`);
+        if (fbRes.ok) {
+          const fbText = await fbRes.text();
+          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+            const fbUser = JSON.parse(fbText);
+            if (fbUser && typeof fbUser.balance === 'number') {
+              balanceFetched = fbUser.balance;
+            }
+          }
+        }
+      }
+
+      if (balanceFetched !== null) {
+        setUserBalance(balanceFetched);
+        saveUserBalance(balanceFetched);
       }
     } catch (err) {
       console.warn('Error refreshing user balance:', err);
@@ -506,11 +652,17 @@ export default function App() {
         })
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          data = JSON.parse(text);
+        }
+      } catch {}
 
-      if (!res.ok || !data.success) {
-        alert(`⚠️ Booking Failed:\n\n${data.error || 'Insufficient balance or booking error.'}`);
-        if (typeof data.currentBalance === 'number') {
+      if (!res.ok || !data || !data.success) {
+        alert(`⚠️ Booking Failed:\n\n${data?.error || 'Insufficient balance or booking error.'}`);
+        if (typeof data?.currentBalance === 'number') {
           setUserBalance(data.currentBalance);
           saveUserBalance(data.currentBalance);
         }
