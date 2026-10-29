@@ -23,7 +23,8 @@ import {
   saveStoredTournament, 
   loadUserBalance, 
   saveUserBalance,
-  defaultPaymentAccounts 
+  defaultPaymentAccounts,
+  mergeTournamentWithFirebase
 } from './utils/storage';
 import { Sparkles } from 'lucide-react';
 
@@ -435,16 +436,28 @@ export default function App() {
         setTournament(data.tournament);
         saveStoredTournament(data.tournament);
       } else {
-        const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json');
-        if (fbRes.ok) {
-          const fbText = await fbRes.text();
-          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
-            const fbData = JSON.parse(fbText);
-            if (fbData && Array.isArray(fbData.teams) && fbData.teams.length >= 25) {
-              setTournament(fbData);
-              saveStoredTournament(fbData);
-            }
-          }
+        // Direct live sync with Firebase RTDB
+        const [fbTRes, fbRRes] = await Promise.all([
+          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json'),
+          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/PUBG001.json')
+        ]);
+        let fbTData: any = null;
+        let fbRData: any = null;
+        if (fbTRes.ok) {
+          const tText = await fbTRes.text();
+          if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) fbTData = JSON.parse(tText);
+        }
+        if (fbRRes.ok) {
+          const rText = await fbRRes.text();
+          if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) fbRData = JSON.parse(rText);
+        }
+
+        if (fbTData || fbRData) {
+          setTournament(prev => {
+            const merged = mergeTournamentWithFirebase(prev, fbTData, fbRData);
+            saveStoredTournament(merged);
+            return merged;
+          });
         }
       }
 

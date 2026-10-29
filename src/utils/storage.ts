@@ -148,3 +148,101 @@ export const defaultPaymentAccounts: PaymentAccount[] = [
     isActive: true
   }
 ];
+
+// Helper to parse date/time into timestamp (Asia/Karachi UTC+5)
+export function parseKarachiTimestamp(dateStr?: string, timeStr?: string): number {
+  const cleanDate = (dateStr || '2026-10-30').trim();
+  const rawTime = (timeStr || '11:00').trim();
+  const cleanTime = rawTime.length === 5 ? rawTime : `${rawTime}:00`.slice(0, 5);
+  const isoWithKarachiTz = `${cleanDate}T${cleanTime}:00+05:00`;
+  const parsed = Date.parse(isoWithKarachiTz);
+  return isNaN(parsed) ? (Date.now() + 2 * 3600 * 1000) : parsed;
+}
+
+// Master Tournament Merger: Combines 25 teams with live Firebase RTDB settings & reservations
+export function mergeTournamentWithFirebase(
+  base: Tournament,
+  firebaseSettings: any,
+  reservationsData: any
+): Tournament {
+  const matchDate = firebaseSettings?.matchDate || base.matchDate || '2026-10-30';
+  const matchTime = firebaseSettings?.matchTime || base.matchTime || '11:00';
+  const roomId = firebaseSettings?.roomId || base.roomId || '69151604';
+  const roomPassword = firebaseSettings?.roomPassword || base.roomPassword || '1234';
+  const youtubeUrl = firebaseSettings?.youtubeUrl || base.youtubeUrl;
+  const manualStatus = firebaseSettings?.manualStatus || base.manualStatus || 'AUTO';
+
+  const matchStartTime = parseKarachiTimestamp(matchDate, matchTime);
+  const roomOpenTime = matchStartTime;
+  const matchEndTime = matchStartTime + 60 * 60 * 1000;
+
+  const current = Date.now();
+  let status: any = 'REGISTRATION_OPEN';
+  if (manualStatus && manualStatus !== 'AUTO') {
+    status = manualStatus;
+  } else {
+    if (current < matchStartTime) {
+      status = 'REGISTRATION_OPEN';
+    } else if (current >= matchStartTime && current < matchStartTime + 15 * 60 * 1000) {
+      status = 'ROOM_OPEN';
+    } else if (current >= matchStartTime + 15 * 60 * 1000 && current < matchEndTime) {
+      status = 'MATCH_LIVE';
+    } else {
+      status = 'WAIT_FOR_RESULT';
+    }
+  }
+
+  // Generate 25 clean teams and overlay live reservations
+  const teams: Team[] = createInitial25Teams().map((team) => {
+    const tNum = team.teamNumber;
+    const teamRes = reservationsData?.[`TEAM${tNum}`] || reservationsData?.[`Team_${tNum}`];
+    if (!teamRes) return team;
+
+    const captainUid = teamRes.captainUid || null;
+    const members = teamRes.members;
+
+    const updatedSeats = team.seats.map((seat) => {
+      const sNum = seat.seatNumber;
+      let member: any = null;
+      if (Array.isArray(members)) {
+        member = members[sNum];
+      } else if (members && typeof members === 'object') {
+        member = members[String(sNum)] || members[sNum];
+      }
+
+      if (member && (member.status === 'reserved' || member.status === 'RESERVED_CONFIRMED' || member.status === 'APPROVED')) {
+        return {
+          ...seat,
+          status: 'APPROVED' as const,
+          playerName: member.playerName || (sNum === 1 ? 'Player 1' : `Player ${sNum}`),
+          playerUid: member.uid || member.playerUid
+        };
+      }
+      return seat;
+    });
+
+    return {
+      ...team,
+      captainUid,
+      seats: updatedSeats
+    };
+  });
+
+  return {
+    ...base,
+    id: firebaseSettings?.id || base.id || 'PUBG001',
+    title: firebaseSettings?.title || base.title,
+    matchDate,
+    matchTime,
+    matchStartTime,
+    roomOpenTime,
+    matchEndTime,
+    roomId,
+    roomPassword,
+    youtubeUrl,
+    manualStatus,
+    status,
+    teams,
+    serverTime: Date.now()
+  };
+}
