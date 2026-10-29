@@ -3,12 +3,7 @@ import {
   CheckCircle2, 
   Copy, 
   Check, 
-  X, 
-  ShieldAlert, 
-  Clock, 
-  Coins, 
-  Flame, 
-  AlertTriangle 
+  X 
 } from 'lucide-react';
 
 interface BookingSuccessModalProps {
@@ -67,9 +62,6 @@ export const BookingSuccessModal: React.FC<BookingSuccessModalProps> = ({
         <h3 className="font-heading text-2xl font-black text-white uppercase tracking-wide">
           BOOKING SUBMITTED SUCCESSFULLY!
         </h3>
-        <p className="text-xs text-cyan-200/90 mt-0.5">
-          Your seat(s) in Team {booking.teamNumber} have been confirmed and reserved.
-        </p>
 
         {/* Reservation Details Card */}
         <div className="my-4 p-4 rounded-xl bg-slate-900/90 border border-emerald-500/50 text-left space-y-2.5">
@@ -117,46 +109,6 @@ export const BookingSuccessModal: React.FC<BookingSuccessModalProps> = ({
               >
                 {copiedId ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* OFFICIAL TOURNAMENT RULES (As requested by user) */}
-        <div className="text-left bg-gradient-to-br from-amber-950/40 via-slate-900 to-black/60 p-4 rounded-xl border border-amber-500/60 mb-5 space-y-2.5">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-400">
-            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Important Match Rules &amp; Prize Distribution</span>
-          </div>
-
-          <div className="space-y-2 text-xs text-slate-200">
-            {/* Rule 1 */}
-            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-black/40 border border-slate-800">
-              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold font-mono text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                1
-              </span>
-              <div className="font-medium text-slate-200">
-                <strong className="text-amber-300">Payment Non-Refundable:</strong> Kisi bhi surat me seat cancel ya refund nahi hogi.
-              </div>
-            </div>
-
-            {/* Rule 2 */}
-            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-black/40 border border-slate-800">
-              <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold font-mono text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                2
-              </span>
-              <div className="font-medium text-slate-200">
-                <strong className="text-cyan-300">15-Min Room Window:</strong> Room sirf 15 minute tak khula rahega. Sab ko 15 minute ke andar game lobby join karna lazmi hoga, 15 minute baad match start ho jayega.
-              </div>
-            </div>
-
-            {/* Rule 3 */}
-            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-black/40 border border-slate-800">
-              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold font-mono text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                3
-              </span>
-              <div className="font-medium text-slate-200">
-                <strong className="text-emerald-300">Per Kill 100 Diamonds Reward:</strong> Room ke end hote hi payment <span className="text-amber-400 font-bold font-mono">1 Kill = 100 Diamonds</span> aapke account me direct transfer ho jayenge.
-              </div>
             </div>
           </div>
         </div>

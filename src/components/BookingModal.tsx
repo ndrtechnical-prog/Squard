@@ -344,11 +344,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                           <Users className="w-3.5 h-3.5" /> Player {idx + 1}
                         </span>
                       )}
-                      {idx === 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-[10px] text-amber-300 font-bold uppercase tracking-wide flex items-center gap-1">
-                          👑 Team Captain (You)
-                        </span>
-                      )}
                     </span>
                     <span className="text-[10px] text-slate-500 uppercase font-mono">
                       Seat #{availableSeats[idx]?.seatNumber ?? idx + 1}

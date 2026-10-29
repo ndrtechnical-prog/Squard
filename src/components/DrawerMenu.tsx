@@ -329,13 +329,12 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
                       <Sparkles className="w-3 h-3 text-amber-400" />
                       <span>Current Reservations ({bookings.length})</span>
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Firebase RTDB</span>
                   </div>
 
                   {isLoadingBookings ? (
                     <div className="p-6 rounded-xl bg-[#120a06] border border-amber-900/30 text-center space-y-2 text-amber-200/70">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-400" />
-                      <p className="text-xs">Fetching your reservations from Firebase...</p>
+                      <p className="text-xs">Fetching your reservations...</p>
                     </div>
                   ) : bookingError ? (
                     <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">

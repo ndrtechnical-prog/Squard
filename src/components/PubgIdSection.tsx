@@ -223,11 +223,6 @@ export const PubgIdSection: React.FC<PubgIdSectionProps> = ({
             </p>
           </div>
         </div>
-
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/50 border border-emerald-600/40 text-[10px] text-emerald-400 font-mono">
-          <ShieldCheck className="w-3 h-3" />
-          <span>Firebase RTDB Protected</span>
-        </div>
       </div>
 
       {/* Inputs Form */}
