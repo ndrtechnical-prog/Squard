@@ -47,7 +47,12 @@ export const onRequest = async (context: any) => {
     let user: any = null;
     try {
       const fbRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanId)}.json`);
-      if (fbRes.ok) user = await fbRes.json();
+      if (fbRes.ok) {
+        const text = await fbRes.text();
+        if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+          try { user = JSON.parse(text); } catch {}
+        }
+      }
     } catch (e) {
       console.warn('Error fetching user:', e);
     }

@@ -19,7 +19,10 @@ export const onRequest = async (context: any) => {
     const res = await fetch(`${FIREBASE_DB_URL}/Notice.json`);
     let notice = null;
     if (res.ok) {
-      notice = await res.json();
+      const text = await res.text();
+      if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+        try { notice = JSON.parse(text); } catch {}
+      }
     }
     return new Response(JSON.stringify({
       success: true,

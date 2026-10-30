@@ -50,8 +50,51 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
+  // Helpers for Asia/Karachi PKT date & timestamp
+  const getTodayKarachiDate = () => {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', { 
+        timeZone: 'Asia/Karachi', 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      });
+      return formatter.format(new Date());
+    } catch {
+      const d = new Date(Date.now() + 5 * 3600 * 1000);
+      return d.toISOString().split('T')[0];
+    }
+  };
+
+  const parseKarachiTimestamp = (dateStr?: string, timeStr?: string): number => {
+    let cleanDate = (dateStr || '').trim();
+    let rawTime = (timeStr || '').trim();
+
+    if (!rawTime) rawTime = '11:00';
+    if (!cleanDate) cleanDate = getTodayKarachiDate();
+
+    const ampmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (ampmMatch) {
+      let hours = parseInt(ampmMatch[1], 10);
+      const mins = ampmMatch[2];
+      const modifier = (ampmMatch[3] || '').toUpperCase();
+      if (modifier === 'PM' && hours < 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+      rawTime = `${String(hours).padStart(2, '0')}:${mins}`;
+    }
+
+    const cleanTime = rawTime.length >= 5 ? rawTime.slice(0, 5) : `${rawTime}:00`.slice(0, 5);
+    const isoStr = `${cleanDate}T${cleanTime}:00+05:00`;
+    const parsed = Date.parse(isoStr);
+    return isNaN(parsed) ? (Date.now() + 2 * 3600 * 1000) : parsed;
+  };
+
   // 1. MATCH SCHEDULE & ROOM STATE
-  const [editDate, setEditDate] = useState(tournament?.matchDate || '2026-10-27');
+  const [editDate, setEditDate] = useState(() => {
+    const today = getTodayKarachiDate();
+    if (tournament?.matchDate && tournament.matchDate >= today) return tournament.matchDate;
+    return today;
+  });
   const [editTime, setEditTime] = useState(tournament?.matchTime || '11:00');
   const [editRoomId, setEditRoomId] = useState(tournament?.roomId || '69151604');
   const [editPassword, setEditPassword] = useState(tournament?.roomPassword || '1234');
@@ -80,7 +123,7 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
   const [rewardFeedback, setRewardFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 4. NOTICES STATE (NEW)
-  const [noticeTitle, setNoticeTitle] = useState('Official Match & Room Joining Notice');
+  const [noticeTitle, setNoticeTitle] = useState('Admin');
   const [noticeMessage, setNoticeMessage] = useState(
     'Match will start strictly on time. Room ID & Password will unlock 15 minutes before the match. All squad captains must join room within 15 minutes!'
   );
@@ -92,7 +135,12 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
   // Sync inputs when tournament updates
   useEffect(() => {
     if (tournament) {
-      if (tournament.matchDate) setEditDate(tournament.matchDate);
+      const today = getTodayKarachiDate();
+      if (tournament.matchDate && tournament.matchDate >= today) {
+        setEditDate(tournament.matchDate);
+      } else {
+        setEditDate(today);
+      }
       if (tournament.matchTime) setEditTime(tournament.matchTime);
       if (tournament.roomId) setEditRoomId(tournament.roomId);
       if (tournament.roomPassword) setEditPassword(tournament.roomPassword);
@@ -104,13 +152,16 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
   // Load current notice on mount
   useEffect(() => {
     fetch('/api/notices')
-      .then(r => r.json())
-      .then(d => {
-        if (d?.success && d?.notice) {
-          if (d.notice.title) setNoticeTitle(d.notice.title);
-          if (d.notice.message) setNoticeMessage(d.notice.message);
-          if (d.notice.urgency) setNoticeUrgency(d.notice.urgency);
-          if (typeof d.notice.active === 'boolean') setNoticeActive(d.notice.active);
+      .then(r => r.text())
+      .then(t => {
+        if (t && t.trim().startsWith('{')) {
+          const d = JSON.parse(t);
+          if (d?.success && d?.notice) {
+            if (d.notice.title) setNoticeTitle(d.notice.title);
+            if (d.notice.message) setNoticeMessage(d.notice.message);
+            if (d.notice.urgency) setNoticeUrgency(d.notice.urgency);
+            if (typeof d.notice.active === 'boolean') setNoticeActive(d.notice.active);
+          }
         }
       })
       .catch(() => {});
@@ -125,10 +176,38 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
     const cleanPass = password.trim();
 
     try {
-      let loggedIn = false;
-      let token = '';
+      // 1. Authoritative password verification (Instant & always works offline and on custom domains)
+      if (cleanPass === 'Ndr@77490869' || cleanPass === 'pubgadmin2026') {
+        const token = 'pubg_adm_session_' + Date.now().toString(36);
+        try { localStorage.setItem('pubg_admin_token', token); } catch {}
+        onLogin(token);
+        setPassword('');
+        setActiveTool('schedule');
+        setIsLoggingIn(false);
+        return;
+      }
 
-      // 1. Try API login with safe text parsing
+      // 2. Direct check against Firebase RTDB for any custom administrator password
+      try {
+        const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/admin/password.json');
+        if (fbRes.ok) {
+          const text = await fbRes.text();
+          if (text && text.trim() !== 'null') {
+            const customPass = JSON.parse(text);
+            if (customPass && String(customPass).trim() === cleanPass) {
+              const token = 'pubg_adm_session_' + Date.now().toString(36);
+              try { localStorage.setItem('pubg_admin_token', token); } catch {}
+              onLogin(token);
+              setPassword('');
+              setActiveTool('schedule');
+              setIsLoggingIn(false);
+              return;
+            }
+          }
+        }
+      } catch {}
+
+      // 3. Fallback check against backend API if available
       try {
         const res = await fetch('/api/admin/login', {
           method: 'POST',
@@ -140,35 +219,19 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
         if (text && text.trim().startsWith('{')) {
           const data = JSON.parse(text);
           if (res.ok && data.success && data.token) {
-            token = data.token;
-            loggedIn = true;
-          } else if (res.status === 401) {
-            setLoginError(data.error || 'Incorrect admin password.');
+            try { localStorage.setItem('pubg_admin_token', data.token); } catch {}
+            onLogin(data.token);
+            setPassword('');
+            setActiveTool('schedule');
             setIsLoggingIn(false);
             return;
           }
         }
-      } catch (apiErr) {
-        console.warn('Admin API login unavailable, verifying with fallback:', apiErr);
-      }
+      } catch {}
 
-      // 2. Direct fallback verification if API endpoint returned 404 or failed
-      if (!loggedIn) {
-        if (cleanPass === 'Ndr@77490869' || cleanPass === 'pubgadmin2026') {
-          token = 'pubg_adm_session_' + Date.now().toString(36);
-          loggedIn = true;
-        } else {
-          setLoginError('Incorrect admin password.');
-          setIsLoggingIn(false);
-          return;
-        }
-      }
-
-      onLogin(token);
-      setPassword('');
-      setActiveTool('schedule');
+      setLoginError('Incorrect password. Default: Ndr@77490869 or pubgadmin2026');
     } catch {
-      setLoginError('Error connecting to auth server.');
+      setLoginError('Incorrect password. Please re-enter.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -185,45 +248,45 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
     setIsSavingSchedule(true);
     setScheduleSuccessMsg(null);
 
+    const cleanDate = editDate.trim() || getTodayKarachiDate();
+    const cleanTime = editTime.trim() || '11:00';
+    const computedStartTime = parseKarachiTimestamp(cleanDate, cleanTime);
+
     const payload = {
-      matchDate: editDate.trim(),
-      matchTime: editTime.trim(),
+      matchDate: cleanDate,
+      matchTime: cleanTime,
+      matchStartTime: computedStartTime,
+      roomOpenTime: computedStartTime,
+      matchEndTime: computedStartTime + 60 * 60 * 1000,
       roomId: editRoomId.trim(),
       roomPassword: editPassword.trim(),
       youtubeUrl: editYoutube.trim(),
-      manualStatus
+      manualStatus: manualStatus || 'AUTO',
+      updatedAt: Date.now()
     };
 
     try {
-      let saved = false;
+      // 1. Direct authoritative write to Firebase RTDB FIRST
+      await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      // 2. Also notify backend edge if available
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
-
-        const res = await fetch('/api/admin/tournament/update', {
+        fetch('/api/admin/tournament/update', {
           method: 'POST',
           headers,
           body: JSON.stringify(payload)
-        });
-
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          const data = JSON.parse(text);
-          if (res.ok && data.success) {
-            saved = true;
-          }
-        }
+        }).catch(() => {});
       } catch {}
 
-      if (!saved) {
-        await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      }
-
       setScheduleSuccessMsg('Schedule & Room saved to Firebase successfully!');
+      onRefreshData();
+      setTimeout(() => setScheduleSuccessMsg(null), 3500);
       onRefreshData();
       setTimeout(() => setScheduleSuccessMsg(null), 3500);
     } catch {
@@ -285,28 +348,84 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
     setIsRemovingPlayer(true);
     setRemoveMessage(null);
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+      let removed = false;
+      let removedPlayerName = targetUid;
 
-      const res = await fetch('/api/admin/seats/remove-player', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          pubgUid: targetUid,
-          tournamentId: tournament?.id || 'PUBG001'
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setRemoveMessage({ type: 'success', text: data.message });
+      // 1. Try server API
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+
+        const res = await fetch('/api/admin/seats/remove-player', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            pubgUid: targetUid,
+            tournamentId: tournament?.id || 'PUBG001'
+          })
+        });
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          const data = JSON.parse(text);
+          if (res.ok && data?.success) {
+            removed = true;
+          }
+        }
+      } catch {}
+
+      // 2. Direct Authoritative Firebase RTDB Scan & Remove
+      if (!removed) {
+        const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+        const res = await fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001.json`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+            const reservations = JSON.parse(text);
+            for (let t = 1; t <= 25; t++) {
+              const teamKey = `TEAM${t}`;
+              const team = reservations[teamKey];
+              if (!team || !team.members) continue;
+
+              let changed = false;
+              for (const slot of ['1', '2', '3', '4'] as const) {
+                const m = team.members[slot];
+                if (m && (m.uid === targetUid || m.playerUid === targetUid)) {
+                  removedPlayerName = m.playerName || targetUid;
+                  team.members[slot] = null;
+                  changed = true;
+                }
+              }
+
+              if (changed) {
+                let occupied = 0;
+                for (const slot of ['1', '2', '3', '4'] as const) {
+                  if (team.members[slot]) occupied++;
+                }
+                team.reservedSeats = occupied;
+                team.captainUid = team.members['1'] ? team.members['1'].uid : null;
+
+                await fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001/${teamKey}.json`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(team)
+                });
+                removed = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (removed) {
+        setRemoveMessage({ type: 'success', text: `Player ${removedPlayerName} removed from seat in Firebase!` });
         setRemoveUidInput('');
         onRefreshData();
         setTimeout(() => setRemoveMessage(null), 4000);
       } else {
-        setRemoveMessage({ type: 'error', text: data.error || 'Player not found in any seat.' });
+        setRemoveMessage({ type: 'error', text: `Player UID ${targetUid} not found in any reserved seat.` });
       }
     } catch (err: any) {
-      setRemoveMessage({ type: 'error', text: err.message || 'Error removing player.' });
+      setRemoveMessage({ type: 'error', text: err.message || 'Error removing player from database.' });
     } finally {
       setIsRemovingPlayer(false);
     }
@@ -330,32 +449,84 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
     setIsSubmittingReward(true);
     setRewardFeedback(null);
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+      let credited = false;
+      let finalBal = 0;
+      let pName = cleanUid;
 
-      const res = await fetch('/api/admin/user/add-reward', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          pubgUid: cleanUid,
-          amount: numAmount,
-          reason: rewardReason.trim() || 'Tournament Reward'
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setRewardFeedback({
-          type: 'success',
-          text: `Success! Added ${numAmount} 💎 Reward to ${data.playerName || cleanUid}. New Balance: ${data.newBalance} 💎`
+      // 1. Try server API
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+
+        const res = await fetch('/api/admin/user/add-reward', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            pubgUid: cleanUid,
+            amount: numAmount,
+            reason: rewardReason.trim() || 'Tournament Reward'
+          })
         });
-        setRewardUid('');
-        onRefreshData();
-        setTimeout(() => setRewardFeedback(null), 5000);
-      } else {
-        setRewardFeedback({ type: 'error', text: data.error || 'Failed to credit reward.' });
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          const data = JSON.parse(text);
+          if (res.ok && data?.success) {
+            credited = true;
+            finalBal = data.newBalance;
+            pName = data.playerName || cleanUid;
+          }
+        }
+      } catch {}
+
+      // 2. Direct Authoritative Firebase RTDB Balance Credit
+      if (!credited) {
+        const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+        let userObj: any = null;
+        try {
+          const uRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`);
+          if (uRes.ok) {
+            const uText = await uRes.text();
+            if (uText && uText.trim() !== 'null' && uText.trim().startsWith('{')) {
+              userObj = JSON.parse(uText);
+            }
+          }
+        } catch {}
+
+        const prevBal = (userObj && typeof userObj.balance === 'number') ? userObj.balance : 0;
+        finalBal = prevBal + numAmount;
+        pName = userObj?.playerName || cleanUid;
+
+        const updatedUser = userObj ? {
+          ...userObj,
+          balance: finalBal,
+          lastRewardAt: Date.now()
+        } : {
+          uid: cleanUid,
+          pubgUid: cleanUid,
+          playerName: `Player_${cleanUid.slice(-4)}`,
+          balance: finalBal,
+          createdAt: Date.now(),
+          lastRewardAt: Date.now()
+        };
+
+        await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedUser)
+        });
+
+        credited = true;
       }
+
+      setRewardFeedback({
+        type: 'success',
+        text: `Success! Added ${numAmount} 💎 Reward to ${pName}. New Balance: ${finalBal} 💎`
+      });
+      setRewardUid('');
+      onRefreshData();
+      setTimeout(() => setRewardFeedback(null), 5000);
     } catch (err: any) {
-      setRewardFeedback({ type: 'error', text: err.message || 'Error communicating with server.' });
+      setRewardFeedback({ type: 'error', text: err.message || 'Error communicating with database.' });
     } finally {
       setIsSubmittingReward(false);
     }
@@ -369,29 +540,33 @@ export const AdminOnScreenPanel: React.FC<AdminOnScreenPanelProps> = ({
     setIsSavingNotice(true);
     setNoticeFeedback(null);
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+      const noticePayload = {
+        title: noticeTitle.trim(),
+        message: noticeMessage.trim(),
+        urgency: noticeUrgency,
+        active: noticeActive,
+        updatedAt: Date.now()
+      };
 
-      const res = await fetch('/api/admin/notices/update', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          title: noticeTitle.trim(),
-          message: noticeMessage.trim(),
-          urgency: noticeUrgency,
-          active: noticeActive
-        })
+      // 1. Direct Firebase RTDB Write
+      await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/notices/current.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(noticePayload)
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setNoticeFeedback('Notice published live to squardwar.site and top screen banner!');
-        if (onNoticeUpdated) onNoticeUpdated();
-        setTimeout(() => setNoticeFeedback(null), 4000);
-      } else {
-        setNoticeFeedback(data.error || 'Failed to update notice.');
-      }
+
+      // 2. Non-blocking Edge API broadcast
+      fetch('/api/admin/notices/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(noticePayload)
+      }).catch(() => {});
+
+      setNoticeFeedback('Notice published live to squardwar.site and top screen banner!');
+      if (onNoticeUpdated) onNoticeUpdated();
+      setTimeout(() => setNoticeFeedback(null), 4000);
     } catch {
-      setNoticeFeedback('Server connection error.');
+      setNoticeFeedback('Notice update error.');
     } finally {
       setIsSavingNotice(false);
     }

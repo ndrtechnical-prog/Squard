@@ -7,7 +7,11 @@ export const onRequestGet = async (context: EventContext<Env>) => {
     if (!env.DB) {
       const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json');
       if (fbRes.ok) {
-        const tournament = await fbRes.json();
+        const text = await fbRes.text();
+        let tournament: any = null;
+        if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+          try { tournament = JSON.parse(text); } catch {}
+        }
         return new Response(JSON.stringify({ tournament, paymentAccounts: [] }), {
           headers: { 'Content-Type': 'application/json' }
         });

@@ -92,13 +92,36 @@ export const DepositModal: React.FC<DepositModalProps> = ({
     setIsRefreshing(true);
     setRefreshMessage(null);
     try {
-      const res = await fetch(`/api/user/balance?pubgUid=${encodeURIComponent(cleanUid)}`);
-      const data = await res.json();
-      if (res.ok && data.success && typeof data.balance === 'number') {
-        if (onBalanceUpdated) {
-          onBalanceUpdated(data.balance);
+      let balance: number | null = null;
+      try {
+        const res = await fetch(`/api/user/balance?pubgUid=${encodeURIComponent(cleanUid)}`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().startsWith('{')) {
+            const data = JSON.parse(text);
+            if (data.success && typeof data.balance === 'number') {
+              balance = data.balance;
+            }
+          }
         }
-        setRefreshMessage(`Latest Balance: ${data.balance} 💎 (PKR ${data.balance})`);
+      } catch {}
+
+      if (balance === null) {
+        const fbRes = await fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/users/${encodeURIComponent(cleanUid)}.json`);
+        if (fbRes.ok) {
+          const fbText = await fbRes.text();
+          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+            const u = JSON.parse(fbText);
+            if (u && typeof u.balance === 'number') balance = u.balance;
+          }
+        }
+      }
+
+      if (balance !== null) {
+        if (onBalanceUpdated) {
+          onBalanceUpdated(balance);
+        }
+        setRefreshMessage(`Latest Balance: ${balance} 💎 (PKR ${balance})`);
       } else {
         setRefreshMessage('Could not find updated payment yet. If you just submitted, please allow 10-20 seconds for verification.');
       }

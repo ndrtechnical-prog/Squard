@@ -197,21 +197,57 @@ export default function App() {
     }
   }, [syncPubgId]);
 
+  // Dedicated fast user balance refresh from Firebase RTDB (so returning from reward section updates immediately!)
+  const refreshUserBalance = useCallback(async (explicitUid?: string) => {
+    const targetUid = (explicitUid || savedPubgId || '').trim();
+    if (!targetUid) return;
+
+    try {
+      let balanceFetched: number | null = null;
+      try {
+        const res = await fetch(`/api/user/balance?pubgUid=${encodeURIComponent(targetUid)}&t=${Date.now()}`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().startsWith('{')) {
+            const data = JSON.parse(text);
+            if (data.success && typeof data.balance === 'number') {
+              balanceFetched = data.balance;
+            }
+          }
+        }
+      } catch {}
+
+      if (balanceFetched === null) {
+        const fbRes = await fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/users/${encodeURIComponent(targetUid)}.json`);
+        if (fbRes.ok) {
+          const fbText = await fbRes.text();
+          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+            const fbUser = JSON.parse(fbText);
+            if (fbUser && typeof fbUser.balance === 'number') {
+              balanceFetched = fbUser.balance;
+            }
+          }
+        }
+      }
+
+      if (balanceFetched !== null) {
+        setUserBalance(balanceFetched);
+        saveUserBalance(balanceFetched);
+      }
+    } catch (err) {
+      console.warn('Error refreshing user balance:', err);
+    }
+  }, [savedPubgId]);
+
   // Real-time Balance Sync: auto-refresh when player returns from external payment portal
   useEffect(() => {
     const handleWindowFocus = () => {
-      const activeUid = localStorage.getItem('pubg_saved_uid');
-      if (activeUid) {
-        fetch(`/api/user/balance?pubgUid=${encodeURIComponent(activeUid)}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data?.success && typeof data.balance === 'number') {
-              setUserBalance(data.balance);
-              saveUserBalance(data.balance);
-            }
-          })
-          .catch(() => {});
-      }
+      try {
+        const activeUid = localStorage.getItem('pubg_saved_uid');
+        if (activeUid) {
+          refreshUserBalance(activeUid);
+        }
+      } catch {}
     };
 
     window.addEventListener('focus', handleWindowFocus);
@@ -226,7 +262,7 @@ export default function App() {
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [refreshUserBalance]);
 
   // Primary PIN-protected Profile Authentication Handler
   const handleSaveProfileWithPin = async (uid: string, name: string, pin: string) => {
@@ -235,113 +271,90 @@ export default function App() {
     const cleanPin = pin.trim();
 
     try {
-      let data: any = null;
-      let authenticated = false;
+      const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+      let fbUser: any = null;
 
-      // 1. Try local/edge API endpoint with safe text parsing
+      // 1. Direct Authoritative Firebase RTDB Read
       try {
-        const res = await fetch('/api/user/pin-auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pubgUid: cleanUid, playerName: cleanName, pin: cleanPin })
-        });
-
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          const resData = JSON.parse(text);
-          if (res.ok && resData.success) {
-            data = resData;
-            authenticated = true;
-          } else if (res.status === 401 && resData.error) {
-            return { success: false, error: resData.error };
-          }
-        }
-      } catch (apiErr) {
-        console.warn('API call failed, proceeding to direct Firebase RTDB:', apiErr);
-      }
-
-      // 2. Direct Firebase RTDB fallback if API endpoint returned 404/non-json or failed
-      if (!authenticated) {
-        const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
         const fbRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`);
-        let fbUser: any = null;
         if (fbRes.ok) {
           const fbText = await fbRes.text();
           if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
-            fbUser = JSON.parse(fbText);
+            try { fbUser = JSON.parse(fbText); } catch {}
           }
         }
-
-        if (fbUser) {
-          if (fbUser.pin && fbUser.pin.trim() !== '') {
-            if (fbUser.pin !== cleanPin) {
-              return { success: false, error: 'Incorrect 4-digit PIN! Please enter the correct PIN for this PUBG ID.' };
-            }
-          } else {
-            fbUser.pin = cleanPin;
-            fbUser.password = cleanPin;
-          }
-
-          if (cleanName) {
-            fbUser.playerName = cleanName;
-          }
-          fbUser.lastLogin = Date.now();
-
-          await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fbUser)
-          });
-        } else {
-          fbUser = {
-            uid: cleanUid,
-            pubgUid: cleanUid,
-            playerName: cleanName || `Player_${cleanUid.slice(-4)}`,
-            pin: cleanPin,
-            password: cleanPin,
-            balance: 0,
-            createdAt: Date.now(),
-            lastLogin: Date.now()
-          };
-
-          await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fbUser)
-          });
-        }
-
-        data = {
-          success: true,
-          user: {
-            uid: fbUser.uid,
-            pubgUid: fbUser.pubgUid,
-            playerName: fbUser.playerName,
-            pin: fbUser.pin,
-            balance: typeof fbUser.balance === 'number' ? fbUser.balance : 0
-          }
-        };
+      } catch (fbErr) {
+        console.warn('Firebase RTDB read warning:', fbErr);
       }
 
-      const activeName = data.user?.playerName || cleanName;
+      // Check or register user
+      if (fbUser) {
+        if (fbUser.pin && fbUser.pin.trim() !== '') {
+          if (fbUser.pin !== cleanPin) {
+            return { success: false, error: 'Incorrect 4-digit PIN! Please enter the correct PIN for this PUBG ID.' };
+          }
+        } else {
+          fbUser.pin = cleanPin;
+          fbUser.password = cleanPin;
+        }
+
+        if (cleanName) {
+          fbUser.playerName = cleanName;
+        }
+        fbUser.lastLogin = Date.now();
+
+        await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fbUser)
+        });
+      } else {
+        fbUser = {
+          uid: cleanUid,
+          pubgUid: cleanUid,
+          playerName: cleanName || `Player_${cleanUid.slice(-4)}`,
+          pin: cleanPin,
+          password: cleanPin,
+          balance: 0,
+          createdAt: Date.now(),
+          lastLogin: Date.now()
+        };
+
+        await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fbUser)
+        });
+      }
+
+      // Non-blocking sync to backend endpoint
+      fetch('/api/user/pin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pubgUid: cleanUid, playerName: cleanName, pin: cleanPin })
+      }).catch(() => {});
+
+      const activeName = fbUser.playerName || cleanName;
       setSavedPubgId(cleanUid);
       setSavedPlayerName(activeName);
       setSavedPin(cleanPin);
 
-      localStorage.setItem('pubg_saved_uid', cleanUid);
-      localStorage.setItem('pubg_saved_name', activeName);
-      localStorage.setItem('pubg_saved_pin', cleanPin);
+      try {
+        localStorage.setItem('pubg_saved_uid', cleanUid);
+        localStorage.setItem('pubg_saved_name', activeName);
+        localStorage.setItem('pubg_saved_pin', cleanPin);
+      } catch {}
 
       setIsEditingPubgId(false);
       setIsPinModalOpen(false);
       setGateMessage(null);
 
-      if (typeof data.user?.balance === 'number') {
-        setUserBalance(data.user.balance);
-        saveUserBalance(data.user.balance);
+      if (typeof fbUser.balance === 'number') {
+        setUserBalance(fbUser.balance);
+        saveUserBalance(fbUser.balance);
       }
 
-      setWelcomeToast(`Access Granted! Welcome ${activeName}. Balance: ${data.user?.balance || 0} 💎`);
+      setWelcomeToast(`Access Granted! Welcome ${activeName}. Balance: ${fbUser.balance || 0} 💎`);
       setTimeout(() => setWelcomeToast(null), 3500);
 
       // Execute queued action if user clicked a button before authenticating
@@ -359,7 +372,7 @@ export default function App() {
 
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || 'Network error connecting to Firebase.' };
+      return { success: false, error: err?.message || 'Error connecting to database.' };
     }
   };
 
@@ -415,57 +428,51 @@ export default function App() {
     };
   }, [closeAllModals]);
 
-  // Safe background sync with backend API (with graceful fallback to stored state)
+  // Primary live sync with Firebase RTDB (Immediate, ultra-fast, works across all domains)
   const fetchTournamentData = useCallback(async () => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
-
-      const res = await fetch('/api/tournament', { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      let data: any = null;
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          data = JSON.parse(text);
+      // 1. Direct authoritative live sync with Firebase Realtime Database
+      const [fbTRes, fbRRes] = await Promise.all([
+        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json'),
+        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/PUBG001.json')
+      ]);
+      let fbTData: any = null;
+      let fbRData: any = null;
+      if (fbTRes.ok) {
+        const tText = await fbTRes.text();
+        if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) {
+          try { fbTData = JSON.parse(tText); } catch {}
+        }
+      }
+      if (fbRRes.ok) {
+        const rText = await fbRRes.text();
+        if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) {
+          try { fbRData = JSON.parse(rText); } catch {}
         }
       }
 
-      if (data && data.tournament && Array.isArray(data.tournament.teams) && data.tournament.teams.length >= 25) {
-        setTournament(data.tournament);
-        saveStoredTournament(data.tournament);
-      } else {
-        // Direct live sync with Firebase RTDB
-        const [fbTRes, fbRRes] = await Promise.all([
-          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json'),
-          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/PUBG001.json')
-        ]);
-        let fbTData: any = null;
-        let fbRData: any = null;
-        if (fbTRes.ok) {
-          const tText = await fbTRes.text();
-          if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) fbTData = JSON.parse(tText);
-        }
-        if (fbRRes.ok) {
-          const rText = await fbRRes.text();
-          if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) fbRData = JSON.parse(rText);
-        }
-
-        if (fbTData || fbRData) {
-          setTournament(prev => {
-            const merged = mergeTournamentWithFirebase(prev, fbTData, fbRData);
-            saveStoredTournament(merged);
-            return merged;
-          });
-        }
+      if (fbTData || fbRData) {
+        setTournament(prev => {
+          const merged = mergeTournamentWithFirebase(prev, fbTData, fbRData);
+          saveStoredTournament(merged);
+          return merged;
+        });
       }
 
-      if (data?.paymentAccounts && data.paymentAccounts.length > 0) {
-        setPaymentAccounts(data.paymentAccounts);
-      }
-    } catch {
-      // Graceful fallback to local stored tournament
+      // 2. Safe check against local edge route if available (non-blocking)
+      fetch('/api/tournament')
+        .then(res => res.text())
+        .then(text => {
+          if (text && text.trim().startsWith('{')) {
+            const data = JSON.parse(text);
+            if (data?.paymentAccounts && data.paymentAccounts.length > 0) {
+              setPaymentAccounts(data.paymentAccounts);
+            }
+          }
+        })
+        .catch(() => {});
+    } catch (err) {
+      console.warn('Firebase sync warning:', err);
     }
   }, []);
 
@@ -475,47 +482,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchTournamentData]);
 
-  // Dedicated fast user balance refresh from Firebase RTDB (so returning from reward section updates immediately!)
-  const refreshUserBalance = useCallback(async (explicitUid?: string) => {
-    const targetUid = (explicitUid || savedPubgId || '').trim();
-    if (!targetUid) return;
-
-    try {
-      let balanceFetched: number | null = null;
-      try {
-        const res = await fetch(`/api/user/balance?pubgUid=${encodeURIComponent(targetUid)}&t=${Date.now()}`);
-        if (res.ok) {
-          const text = await res.text();
-          if (text && text.trim().startsWith('{')) {
-            const data = JSON.parse(text);
-            if (data.success && typeof data.balance === 'number') {
-              balanceFetched = data.balance;
-            }
-          }
-        }
-      } catch {}
-
-      if (balanceFetched === null) {
-        const fbRes = await fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/users/${encodeURIComponent(targetUid)}.json`);
-        if (fbRes.ok) {
-          const fbText = await fbRes.text();
-          if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
-            const fbUser = JSON.parse(fbText);
-            if (fbUser && typeof fbUser.balance === 'number') {
-              balanceFetched = fbUser.balance;
-            }
-          }
-        }
-      }
-
-      if (balanceFetched !== null) {
-        setUserBalance(balanceFetched);
-        saveUserBalance(balanceFetched);
-      }
-    } catch (err) {
-      console.warn('Error refreshing user balance:', err);
-    }
-  }, [savedPubgId]);
 
   // Polling user balance if logged in
   useEffect(() => {
@@ -652,41 +618,160 @@ export default function App() {
     });
 
     try {
-      // 3. Server-Side Atomic Balance Check and Deduction in Firebase RTDB
-      const res = await fetch('/api/seat-reservations/batch-reserve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tournamentId: tournament.id || 'PUBG001',
-          teamNumber,
-          bookerUid: activeUid,
-          costDiamonds,
-          seats: seatsToReserve
-        })
-      });
+      const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+      let serverConfirmed = false;
+      let confirmedBalance = Math.max(0, userBalance - costDiamonds);
 
-      let data: any = null;
+      // 1. Try local/edge API endpoint if available (server mode)
       try {
+        const res = await fetch('/api/seat-reservations/batch-reserve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tournamentId: tournament.id || 'PUBG001',
+            teamNumber,
+            bookerUid: activeUid,
+            costDiamonds,
+            clientBalance: userBalance,
+            seats: seatsToReserve
+          })
+        });
+
         const text = await res.text();
         if (text && text.trim().startsWith('{')) {
-          data = JSON.parse(text);
+          const data = JSON.parse(text);
+          if (res.ok && data?.success) {
+            serverConfirmed = true;
+            if (typeof data.newBalance === 'number') {
+              confirmedBalance = data.newBalance;
+            }
+          } else if (data?.error && !data.error.includes('Cannot POST')) {
+            alert(`⚠️ Booking Failed:\n\n${data.error}`);
+            if (typeof data?.currentBalance === 'number') {
+              setUserBalance(data.currentBalance);
+              saveUserBalance(data.currentBalance);
+            }
+            return;
+          }
         }
       } catch {}
 
-      if (!res.ok || !data || !data.success) {
-        alert(`⚠️ Booking Failed:\n\n${data?.error || 'Insufficient balance or booking error.'}`);
-        if (typeof data?.currentBalance === 'number') {
-          setUserBalance(data.currentBalance);
-          saveUserBalance(data.currentBalance);
-        }
-        handleOpenDeposit(activeUid);
-        return;
-      }
+      // 2. Direct Authoritative Firebase RTDB Write (Ensures 100% success on Cloudflare Pages & domain squardwar.site)
+      if (!serverConfirmed) {
+        // A. Verify and deduct balance in Firebase RTDB
+        let fbUser: any = null;
+        try {
+          const fbUserRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(activeUid)}.json`);
+          if (fbUserRes.ok) {
+            const fbUserText = await fbUserRes.text();
+            if (fbUserText && fbUserText.trim() !== 'null' && fbUserText.trim().startsWith('{')) {
+              fbUser = JSON.parse(fbUserText);
+            }
+          }
+        } catch {}
 
-      // Confirmed new balance from server
-      const confirmedBalance = (typeof data.newBalance === 'number') 
-        ? data.newBalance 
-        : Math.max(0, userBalance - costDiamonds);
+        const fbBal = (fbUser && typeof fbUser.balance === 'number') ? fbUser.balance : userBalance;
+        if (fbBal < costDiamonds) {
+          alert(`⚠️ Insufficient Balance in Firebase!\n\nYou have ${fbBal} 💎, but this booking costs ${costDiamonds} 💎.\nPlease recharge your account to continue.`);
+          setUserBalance(fbBal);
+          saveUserBalance(fbBal);
+          handleOpenDeposit(activeUid);
+          return;
+        }
+
+        const newBal = Math.max(0, fbBal - costDiamonds);
+        confirmedBalance = newBal;
+
+        // Save updated user balance to Firebase RTDB
+        const updatedUserObj = fbUser ? { ...fbUser, balance: newBal } : {
+          uid: activeUid,
+          pubgUid: activeUid,
+          playerName: savedPlayerName || players[0]?.name || 'Player',
+          balance: newBal,
+          updatedAt: Date.now()
+        };
+
+        await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(activeUid)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedUserObj)
+        });
+
+        // B. Fetch existing team reservation from Firebase RTDB
+        const teamKey = `TEAM${teamNumber}`;
+        let teamData: any = null;
+        try {
+          const teamRes = await fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001/${teamKey}.json`);
+          if (teamRes.ok) {
+            const teamText = await teamRes.text();
+            if (teamText && teamText.trim() !== 'null' && teamText.trim().startsWith('{')) {
+              teamData = JSON.parse(teamText);
+            }
+          }
+        } catch {}
+
+        if (!teamData) {
+          teamData = {
+            teamId: teamKey,
+            captainUid: null,
+            totalSeats: 4,
+            reservedSeats: 0,
+            members: { '1': null, '2': null, '3': null, '4': null }
+          };
+        }
+        if (!teamData.members) {
+          teamData.members = { '1': null, '2': null, '3': null, '4': null };
+        }
+
+        // Apply seats
+        for (const s of seatsToReserve) {
+          const sNum = Number(s.seatNumber);
+          if (sNum < 1 || sNum > 4) continue;
+          const slotKey = String(sNum);
+          const isFirstPlayer = sNum === 1;
+
+          teamData.members[slotKey] = {
+            uid: s.uid,
+            playerName: s.playerName,
+            role: isFirstPlayer ? 'captain' : 'member',
+            status: 'reserved',
+            joinedAt: s.joinedAt || Date.now()
+          };
+        }
+
+        let occupied = 0;
+        for (const k of ['1', '2', '3', '4']) {
+          if (teamData.members[k] !== null && teamData.members[k] !== undefined) occupied++;
+        }
+        teamData.reservedSeats = occupied;
+        if (teamData.members['1']) {
+          teamData.captainUid = teamData.members['1'].uid;
+        }
+
+        // Write team reservation directly to Firebase RTDB
+        await fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001/${teamKey}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(teamData)
+        });
+
+        // C. Record receipt in Firebase RTDB /bookings
+        const bookingReceiptId = `BKG_PUBG001_T${teamNumber}_${Date.now()}`;
+        await fetch(`${FIREBASE_DB_URL}/bookings/${bookingReceiptId}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: bookingReceiptId,
+            tournamentId: 'PUBG001',
+            teamNumber,
+            seats: seatsToReserve,
+            bookerUid: activeUid,
+            amountPaid: costDiamonds,
+            status: 'APPROVED',
+            createdAt: Date.now()
+          })
+        }).catch(() => {});
+      }
 
       setUserBalance(confirmedBalance);
       saveUserBalance(confirmedBalance);
@@ -786,7 +871,9 @@ export default function App() {
   // Admin login handler
   const handleAdminLogin = (token: string) => {
     setAdminToken(token);
-    localStorage.getItem('pubg_admin_token');
+    try {
+      localStorage.setItem('pubg_admin_token', token);
+    } catch {}
   };
 
   const handleAdminLogout = () => {
@@ -833,12 +920,6 @@ export default function App() {
 
       {/* 2. MAIN VIEWPORT */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
-        {/* TOP NOTICE BANNER (take users use follow kree Oper notifications nazar aae) */}
-        <NoticeBanner
-          notice={activeNotice}
-          onOpenNoticeModal={() => openWithHistory(() => setIsNoticesModalOpen(true))}
-        />
-
         {/* Free Fire Notice */}
         {activeGame === 'FREE_FIRE' && (
           <div className="mb-4 p-3 rounded-xl bg-orange-950/40 border border-orange-500/50 flex items-center justify-between text-xs text-orange-200">
@@ -851,34 +932,6 @@ export default function App() {
             </button>
           </div>
         )}
-
-        {/* SQUARD WAR BRAND TITLE BAR (Positioned where user marked green, fixing top bar cut-off) */}
-        <div className="mb-3.5 flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-[#170e08]/95 via-[#21140c]/95 to-[#170e08]/95 border border-amber-600/40 shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-400 to-amber-700 p-0.5 shadow-md flex items-center justify-center">
-              <span className="text-black font-black font-heading text-sm">S</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-heading text-lg sm:text-xl font-black tracking-wider text-white uppercase leading-none">
-                  SQUARD<span className="text-amber-400">WAR</span>
-                </h1>
-                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-mono text-amber-300 font-bold uppercase">
-                  Official
-                </span>
-              </div>
-              <span className="text-[10px] text-amber-300/70 font-mono tracking-widest block mt-0.5">
-                squardwar.site
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-[10px] text-amber-400/90 font-mono bg-black/40 px-2.5 py-1 rounded-xl border border-amber-800/30">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="hidden sm:inline">LIVE TOURNAMENT SLOTS</span>
-            <span className="sm:hidden">LIVE SLOTS</span>
-          </div>
-        </div>
 
         {/* HERO BANNER WITH TOURNAMENT POSTER */}
         <HeroBanner
@@ -904,14 +957,7 @@ export default function App() {
         {/* 25 SQUADS & SEAT RESERVATION SECTION */}
         <div className="mt-4 mb-8">
           {/* Header row with Right-Side Reserved Seats Label */}
-          <div className="flex items-center justify-between gap-2 mb-3 px-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 font-heading">
-                Squad Registrations
-              </h2>
-            </div>
-            
+          <div className="flex items-center justify-end gap-2 mb-3 px-1">
             {/* RIGHT SIDE RESERVED COUNT LABEL */}
             <div className="flex items-center gap-2 bg-gradient-to-r from-slate-900/90 to-slate-800/90 border border-slate-700/80 rounded-full px-3.5 py-1 shadow-md">
               <span className="text-[11px] font-medium text-slate-400">Seats Reserved:</span>

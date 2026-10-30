@@ -80,8 +80,18 @@ export const onRequest = async (context: any) => {
         fetch(`${FIREBASE_DB_URL}/tournament/current.json`),
         fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001.json`)
       ]);
-      if (tRes.ok) firebaseSettings = await tRes.json();
-      if (rRes.ok) reservationsData = await rRes.json();
+      if (tRes.ok) {
+        const tText = await tRes.text();
+        if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) {
+          try { firebaseSettings = JSON.parse(tText); } catch {}
+        }
+      }
+      if (rRes.ok) {
+        const rText = await rRes.text();
+        if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) {
+          try { reservationsData = JSON.parse(rText); } catch {}
+        }
+      }
     } catch (e) {
       console.warn('Error querying Firebase RTDB tournament:', e);
     }

@@ -47,6 +47,21 @@ export const createInitial25Teams = (): Team[] => {
   return teams;
 };
 
+export const getTodayKarachiDate = (): string => {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Asia/Karachi', 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    });
+    return formatter.format(new Date());
+  } catch {
+    const d = new Date(Date.now() + 5 * 3600 * 1000);
+    return d.toISOString().split('T')[0];
+  }
+};
+
 export const getInitialTournament = (): Tournament => {
   const now = Date.now();
   const roomOpenTime = now + (3 * 3600 + 42 * 60 + 17) * 1000;
@@ -71,7 +86,7 @@ export const getInitialTournament = (): Tournament => {
     matchEndTime,
     roomId: '69151604',
     roomPassword: '1234',
-    matchDate: '2026-10-27',
+    matchDate: getTodayKarachiDate(),
     matchTime: '11:00',
     youtubeUrl: 'https://youtube.com/@flaregunpk?si=NycZ9BwNyELH405i',
     manualStatus: 'AUTO',
@@ -151,9 +166,22 @@ export const defaultPaymentAccounts: PaymentAccount[] = [
 
 // Helper to parse date/time into timestamp (Asia/Karachi UTC+5)
 export function parseKarachiTimestamp(dateStr?: string, timeStr?: string): number {
-  const cleanDate = (dateStr || '2026-10-30').trim();
-  const rawTime = (timeStr || '11:00').trim();
-  const cleanTime = rawTime.length === 5 ? rawTime : `${rawTime}:00`.slice(0, 5);
+  let cleanDate = (dateStr || '').trim();
+  let rawTime = (timeStr || '').trim();
+  if (!cleanDate) cleanDate = getTodayKarachiDate();
+  if (!rawTime) rawTime = '11:00';
+
+  const ampmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const mins = ampmMatch[2];
+    const modifier = (ampmMatch[3] || '').toUpperCase();
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    rawTime = `${String(hours).padStart(2, '0')}:${mins}`;
+  }
+
+  const cleanTime = rawTime.length >= 5 ? rawTime.slice(0, 5) : `${rawTime}:00`.slice(0, 5);
   const isoWithKarachiTz = `${cleanDate}T${cleanTime}:00+05:00`;
   const parsed = Date.parse(isoWithKarachiTz);
   return isNaN(parsed) ? (Date.now() + 2 * 3600 * 1000) : parsed;
@@ -165,12 +193,14 @@ export function mergeTournamentWithFirebase(
   firebaseSettings: any,
   reservationsData: any
 ): Tournament {
-  const matchDate = firebaseSettings?.matchDate || base.matchDate || '2026-10-30';
-  const matchTime = firebaseSettings?.matchTime || base.matchTime || '11:00';
-  const roomId = firebaseSettings?.roomId || base.roomId || '69151604';
-  const roomPassword = firebaseSettings?.roomPassword || base.roomPassword || '1234';
-  const youtubeUrl = firebaseSettings?.youtubeUrl || base.youtubeUrl;
-  const manualStatus = firebaseSettings?.manualStatus || base.manualStatus || 'AUTO';
+  const today = getTodayKarachiDate();
+  const rawDate = firebaseSettings?.matchDate || base?.matchDate;
+  const matchDate = (rawDate && rawDate >= today) ? rawDate : today;
+  const matchTime = firebaseSettings?.matchTime || base?.matchTime || '11:00';
+  const roomId = firebaseSettings?.roomId || base?.roomId || '69151604';
+  const roomPassword = firebaseSettings?.roomPassword || base?.roomPassword || '1234';
+  const youtubeUrl = firebaseSettings?.youtubeUrl || base?.youtubeUrl;
+  const manualStatus = firebaseSettings?.manualStatus || base?.manualStatus || 'AUTO';
 
   const matchStartTime = parseKarachiTimestamp(matchDate, matchTime);
   const roomOpenTime = matchStartTime;

@@ -184,9 +184,14 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
     try {
       const res = await fetch(`/api/user/wallet?pubgUid=${encodeURIComponent(savedPubgId)}`);
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.wallet) {
-          setWallet(data.wallet);
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          try {
+            const data = JSON.parse(text);
+            if (data.success && data.wallet) {
+              setWallet(data.wallet);
+            }
+          } catch {}
         }
       }
     } catch (e) {
@@ -203,9 +208,14 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
     try {
       const res = await fetch(`/api/cashout/my-history?pubgUid=${encodeURIComponent(savedPubgId)}`);
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.requests)) {
-          setCashOutHistory(data.requests);
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          try {
+            const data = JSON.parse(text);
+            if (data.success && Array.isArray(data.requests)) {
+              setCashOutHistory(data.requests);
+            }
+          } catch {}
         }
       }
     } catch (e) {
@@ -546,9 +556,6 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                 PKR {rewardSettings.perKillReward}{' '}
                 <span className="text-amber-400 text-base sm:text-lg font-bold">per kill</span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-300 max-w-md mx-auto">
-                Official tournament kill bounties are verified and credited directly to your player wallet upon match conclusion.
-              </p>
             </div>
 
             {/* 2-Column Responsive Layout on Desktop / Stacked on Mobile */}
@@ -563,9 +570,6 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                         <Wallet className="w-5 h-5" />
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-400 font-mono uppercase tracking-wider block">
-                          Player Wallet (Firebase Live)
-                        </span>
                         <span className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                           <span>{savedPubgId ? `UID: ${savedPubgId}` : 'No PUBG ID linked'}</span>
                           {savedPubgId && (
@@ -600,8 +604,8 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                     </div>
                   </div>
 
-                  {/* 3 Balance Stats */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4">
+                  {/* 2 Balance Stats */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-4">
                     {/* 1. Diamond Reward Balance */}
                     <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-inner">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -614,18 +618,7 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                       <span className="text-[10px] text-slate-500">From kills &amp; prizes</span>
                     </div>
 
-                    {/* 2. Main Wallet Balance */}
-                    <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-inner">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Main Wallet Balance
-                      </span>
-                      <div className="font-heading text-lg sm:text-xl font-black text-cyan-300 mt-1 font-mono">
-                        PKR {wallet.totalBalance}
-                      </div>
-                      <span className="text-[10px] text-slate-500">Account deposits/funds</span>
-                    </div>
-
-                    {/* 3. Total Withdrawable Balance (in PKR) */}
+                    {/* 2. Total Withdrawable Balance (in PKR) */}
                     <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/70 to-slate-900 border border-emerald-500/60 shadow-md">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wider block">
@@ -640,7 +633,6 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                       <div className="font-heading text-xl sm:text-2xl font-black text-emerald-400 mt-1 font-mono">
                         PKR {wallet.withdrawableBalancePKR}
                       </div>
-                      <span className="text-[10px] text-emerald-200/70">Eligible cash-out amount</span>
                     </div>
                   </div>
 
@@ -853,17 +845,6 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                       </form>
                     </div>
                   )}
-                </div>
-
-                {/* Payout Guarantee Notice */}
-                <div className="p-4 sm:p-5 rounded-3xl bg-emerald-950/40 border border-emerald-500/40 text-xs text-emerald-200 space-y-1.5 shadow-md">
-                  <div className="flex items-center gap-2.5 font-bold text-emerald-300 text-sm">
-                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                    <span>Automated Payout Guarantee (Easypaisa &amp; JazzCash)</span>
-                  </div>
-                  <p className="text-xs text-emerald-200/80 leading-relaxed">
-                    Match k 24 hour k andar rewards share honge. Jis PUBG ID se seat book hui thi, payment usi verified account per dispatch hogi. Players apna balance kisi bhi bank ya mobile wallet me withdraw karwa sakte hain.
-                  </p>
                 </div>
               </div>
 

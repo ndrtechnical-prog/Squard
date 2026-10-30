@@ -145,11 +145,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         body: JSON.stringify({ uid: clean })
       });
 
-      if (!res.ok) {
-        throw new Error('Failed to verify UID');
+      let data: PubgProfileVerification | null = null;
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          try { data = JSON.parse(text); } catch {}
+        }
       }
-
-      const data: PubgProfileVerification = await res.json();
       if (data && data.isValid) {
         setProfiles(prev => ({
           ...prev,

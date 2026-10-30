@@ -34,8 +34,18 @@ export const onRequest = async (context: any) => {
 
     let reservations: any = null;
     let tData: any = null;
-    if (rRes.ok) reservations = await rRes.json();
-    if (tRes.ok) tData = await tRes.json();
+    if (rRes.ok) {
+      const rText = await rRes.text();
+      if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) {
+        try { reservations = JSON.parse(rText); } catch {}
+      }
+    }
+    if (tRes.ok) {
+      const tText = await tRes.text();
+      if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) {
+        try { tData = JSON.parse(tText); } catch {}
+      }
+    }
 
     const activeBookings: any[] = [];
 

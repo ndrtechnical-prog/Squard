@@ -25,13 +25,16 @@ export const onRequest = async (context: any) => {
     try {
       const res = await fetch(`${FIREBASE_DB_URL}/rewardSettings.json`);
       if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data === 'object') {
-          settings = {
-            perKillReward: Number(data.perKillReward) || 100,
-            minWithdrawal: Number(data.minWithdrawal) || 100,
-            estimatedProcessingTime: String(data.estimatedProcessingTime || 'Estimated processing time: 3–4 days after approval.')
-          };
+        const text = await res.text();
+        if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+          const data = JSON.parse(text);
+          if (data && typeof data === 'object') {
+            settings = {
+              perKillReward: Number(data.perKillReward) || 100,
+              minWithdrawal: Number(data.minWithdrawal) || 100,
+              estimatedProcessingTime: String(data.estimatedProcessingTime || 'Estimated processing time: 3–4 days after approval.')
+            };
+          }
         }
       }
     } catch (e) {

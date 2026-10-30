@@ -27,7 +27,11 @@ export const onRequest = async (context: any) => {
   try {
     const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(pubgUid)}.json`);
     if (res.ok) {
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = null;
+      if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+        try { data = JSON.parse(text); } catch {}
+      }
       const balance = data && typeof data.balance === 'number' ? data.balance : 0;
       return new Response(JSON.stringify({
         success: true,

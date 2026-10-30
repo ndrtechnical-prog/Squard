@@ -48,7 +48,10 @@ export const onRequest = async (context: any) => {
     try {
       const fbRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(cleanUid)}.json`);
       if (fbRes.ok) {
-        user = await fbRes.json();
+        const fbText = await fbRes.text();
+        if (fbText && fbText.trim() !== 'null' && fbText.trim().startsWith('{')) {
+          user = JSON.parse(fbText);
+        }
       }
     } catch (e) {
       console.warn('Firebase RTDB read error:', e);

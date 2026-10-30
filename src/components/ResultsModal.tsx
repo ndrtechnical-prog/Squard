@@ -21,8 +21,15 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ isOpen, onClose }) =
     setLoading(true);
     try {
       const res = await fetch('/api/results');
-      const data = await res.json();
-      setResults(data.results || []);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().startsWith('{')) {
+          try {
+            const data = JSON.parse(text);
+            setResults(data.results || []);
+          } catch {}
+        }
+      }
     } catch (err) {
       console.error(err);
     } finally {

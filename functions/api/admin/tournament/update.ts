@@ -36,7 +36,12 @@ export const onRequest = async (context: any) => {
     let current: any = {};
     try {
       const fbRes = await fetch(`${FIREBASE_DB_URL}/tournament/current.json`);
-      if (fbRes.ok) current = await fbRes.json() || {};
+      if (fbRes.ok) {
+        const text = await fbRes.text();
+        if (text && text.trim() !== 'null' && text.trim().startsWith('{')) {
+          try { current = JSON.parse(text); } catch {}
+        }
+      }
     } catch (e) {
       console.warn('Error reading tournament:', e);
     }

@@ -11,7 +11,11 @@ export const onRequestPost = async (context: EventContext<Env>) => {
       });
     }
 
-    const body: any = await request.json();
+    let body: any = {};
+    try {
+      const text = await request.text();
+      if (text && text.trim().startsWith('{')) body = JSON.parse(text);
+    } catch {}
     const {
       tournamentId,
       teamNumber,
