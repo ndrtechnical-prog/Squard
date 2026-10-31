@@ -3,32 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>SquadWar - PUBG Mobile Tournaments &amp; Esports</title>
-    <meta name="description" content="Discover PUBG Mobile tournaments, upcoming matches, team competitions, tournament schedules, and esports events on SquadWar. Explore available tournaments and compete with players." />
-    <meta name="robots" content="index, follow" />
+    
+    <!-- Primary SEO Meta Tags -->
+    <title>SquadWar - Play PUBG Mobile Tournaments &amp; Earn Money | Custom Room IDs</title>
+    <meta name="title" content="SquadWar - Play PUBG Mobile Tournaments &amp; Earn Money | Custom Room IDs" />
+    <meta name="description" content="Join official PUBG Mobile tournaments on SquadWar. Play squad matches, get custom room ID &amp; password, earn money, win diamond rewards, and cash out via Easypaisa &amp; JazzCash." />
+    <meta name="keywords" content="PUBG tournaments, PUBG Mobile tournaments, play PUBG earn money, PUBG custom room ID, PUBG UC, PUBG diamond rewards, PUBG esports live streams, PUBG tournament Pakistan, SquadWar, custom room matches" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
     <link rel="canonical" href="https://squadwar.site/" />
 
-    <!-- Search Console Verification Placeholder -->
+    <!-- Google Search Console Verification -->
     <meta name="google-site-verification" content="YOUR_GOOGLE_SEARCH_CONSOLE_VERIFICATION_TOKEN" />
 
     <!-- Open Graph / Facebook Metadata -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SquadWar" />
-    <meta property="og:title" content="SquadWar - PUBG Mobile Tournaments &amp; Esports" />
-    <meta property="og:description" content="Discover PUBG Mobile tournaments, match schedules, and competitive esports events on SquadWar." />
     <meta property="og:url" content="https://squadwar.site/" />
-    <meta property="og:image" content="https://squadwar.site/images/pubg_room_arena_1792654486530.jpg" />
+    <meta property="og:title" content="SquadWar - Play PUBG Mobile Tournaments &amp; Earn Money | Custom Room IDs" />
+    <meta property="og:description" content="Join official PUBG Mobile tournaments on SquadWar. Play squad matches, get custom room ID &amp; password, earn money, win diamond rewards, and cash out via Easypaisa &amp; JazzCash." />
+    <meta property="og:image" content="https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000560881f4be40c9c8b3189a56.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="SquadWar - PUBG Mobile Tournaments and Esports Arena" />
+    <meta property="og:image:alt" content="SquadWar - PUBG Mobile Tournaments Arena and Custom Rooms" />
     <meta property="og:locale" content="en_US" />
 
     <!-- Twitter / X Card Metadata -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="SquadWar - PUBG Mobile Tournaments &amp; Esports" />
-    <meta name="twitter:description" content="Discover PUBG Mobile tournaments, match schedules, and competitive esports events on SquadWar." />
-    <meta name="twitter:image" content="https://squadwar.site/images/pubg_room_arena_1792654486530.jpg" />
-    <meta name="twitter:image:alt" content="SquadWar - PUBG Mobile Tournaments and Esports Arena" />
+    <meta name="twitter:url" content="https://squadwar.site/" />
+    <meta name="twitter:title" content="SquadWar - Play PUBG Mobile Tournaments &amp; Earn Money | Custom Room IDs" />
+    <meta name="twitter:description" content="Join official PUBG Mobile tournaments on SquadWar. Play squad matches, get custom room ID &amp; password, earn money, win diamond rewards, and cash out via Easypaisa &amp; JazzCash." />
+    <meta name="twitter:image" content="https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000560881f4be40c9c8b3189a56.png" />
 
     <!-- Schema.org Structured Data (JSON-LD) -->
     <script type="application/ld+json">
@@ -40,14 +44,29 @@
             "@id": "https://squadwar.site/#website",
             "url": "https://squadwar.site/",
             "name": "SquadWar",
-            "description": "Discover PUBG Mobile tournaments, upcoming matches, team competitions, tournament schedules, and esports events on SquadWar.",
+            "description": "Play PUBG Mobile tournaments, get custom room ID and password, earn money, and win diamond rewards on SquadWar.",
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://squadwar.site/?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            },
             "inLanguage": "en-US"
+          },
+          {
+            "@type": "SportsOrganization",
+            "@id": "https://squadwar.site/#organization",
+            "name": "SquadWar Esports",
+            "url": "https://squadwar.site/",
+            "logo": "https://squadwar.site/images/avatars/pubg_avatar_golden_1792656009701.jpg",
+            "sameAs": [
+              "https://youtube.com/@flaregunpk?si=NycZ9BwNyELH405i"
+            ]
           },
           {
             "@type": "SportsEvent",
             "@id": "https://squadwar.site/#event-pubg001",
             "name": "PUBG Mobile 100-Player Squad Championship",
-            "description": "Official 100-player Erangel squad tournament with real-time seat reservation, custom room access, and instant prize distributions.",
+            "description": "Official 100-player Erangel squad tournament with real-time seat reservation, custom room access, per-kill bounties, and instant cash-out.",
             "url": "https://squadwar.site/",
             "eventStatus": "https://schema.org/EventScheduled",
             "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
@@ -56,9 +75,7 @@
               "url": "https://squadwar.site/"
             },
             "organizer": {
-              "@type": "Organization",
-              "name": "SquadWar",
-              "url": "https://squadwar.site/"
+              "@id": "https://squadwar.site/#organization"
             },
             "offers": {
               "@type": "Offer",
