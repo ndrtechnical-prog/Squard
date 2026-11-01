@@ -64,7 +64,6 @@ interface DrawerMenuProps {
   savedPubgId?: string;
   savedPlayerName?: string;
   userBalance: number;
-  onOpenLookup: () => void;
   onOpenResults: () => void;
   onOpenAdmin: () => void;
   onClearPubgId: () => void;
@@ -82,7 +81,6 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
   savedPubgId,
   savedPlayerName,
   userBalance,
-  onOpenLookup,
   onOpenResults,
   onOpenAdmin,
   onClearPubgId,
@@ -100,12 +98,28 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
 
   const cleanUid = (savedPubgId || '').trim();
 
-  // Fetch user reservations from Firebase with direct RTDB fallback
-  const fetchMyBookings = useCallback(async () => {
+  // Fetch user reservations from TinyDB (localStorage cache) or Firebase with RTDB fallback
+  const fetchMyBookings = useCallback(async (forceRefresh = false) => {
     if (!cleanUid) {
       setBookings([]);
       return;
     }
+
+    const cacheKey = `pubg_bookings_cache_${cleanUid}`;
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setBookings(parsed);
+            setIsLoadingBookings(false);
+            return;
+          }
+        }
+      } catch {}
+    }
+
     setIsLoadingBookings(true);
     setBookingError(null);
 
@@ -189,6 +203,9 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
       }
 
       setBookings(bookingsList);
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(bookingsList));
+      } catch {}
       setBookingError(null);
     } catch (err: any) {
       console.warn('Error fetching user bookings:', err);
@@ -336,7 +353,7 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
 
                   <div className="flex items-center justify-between pt-1 border-t border-amber-900/40 text-xs">
                     <button
-                      onClick={fetchMyBookings}
+                      onClick={() => fetchMyBookings(true)}
                       disabled={isLoadingBookings}
                       className="py-1 px-2.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-semibold border border-amber-500/40 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
@@ -402,6 +419,15 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
                       <Sparkles className="w-3 h-3 text-amber-400" />
                       <span>Current Reservations ({bookings.length})</span>
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => fetchMyBookings(true)}
+                      className="px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900/60 border border-amber-600/40 text-[10px] font-mono text-amber-300 cursor-pointer flex items-center gap-1"
+                      title="Refresh bookings from server"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingBookings ? 'animate-spin' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
                   </div>
 
                   {isLoadingBookings ? (
@@ -508,19 +534,11 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
           {/* TAB 2: RULES & SUPPORT (The 4 Clean Accordion Sections) */}
           {activeTab === 'rules' && (
             <div className="space-y-2.5 animate-in fade-in duration-150">
-              {/* Quick Action Buttons */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <button
-                  onClick={() => { onClose(); onOpenLookup(); }}
-                  className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-[#1c130c] hover:bg-[#251a10] border border-amber-900/40 text-amber-200 hover:text-white text-[11px] font-semibold transition-colors cursor-pointer text-center"
-                >
-                  <Search className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Check Room</span>
-                </button>
-
+              {/* Quick Action Button */}
+              <div className="mb-3">
                 <button
                   onClick={() => { onClose(); onOpenResults(); }}
-                  className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-[#1c130c] hover:bg-[#251a10] border border-amber-900/40 text-amber-200 hover:text-white text-[11px] font-semibold transition-colors cursor-pointer text-center"
+                  className="w-full flex items-center justify-center gap-1.5 p-2 rounded-xl bg-[#1c130c] hover:bg-[#251a10] border border-amber-900/40 text-amber-200 hover:text-white text-[11px] font-semibold transition-colors cursor-pointer text-center"
                 >
                   <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span>Leaderboard</span>

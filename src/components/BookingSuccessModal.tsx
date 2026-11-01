@@ -10,14 +10,12 @@ interface BookingSuccessModalProps {
   isOpen: boolean;
   booking: any;
   onClose: () => void;
-  onOpenLookup: (query: string) => void;
 }
 
 export const BookingSuccessModal: React.FC<BookingSuccessModalProps> = ({
   isOpen,
   booking,
-  onClose,
-  onOpenLookup
+  onClose
 }) => {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedTrx, setCopiedTrx] = useState(false);
@@ -113,21 +111,14 @@ export const BookingSuccessModal: React.FC<BookingSuccessModalProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3">
+        {/* Action Button */}
+        <div>
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer border border-slate-700 hover:border-slate-600 active:scale-95 shadow-md"
+            className="w-full py-3 px-4 rounded-xl pubg-amber-glow-btn text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-lg"
           >
             DONE
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenLookup(booking.transactionRef || booking.id)}
-            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-[0_0_15px_rgba(0,240,255,0.3)]"
-          >
-            TRACK STATUS
           </button>
         </div>
       </div>

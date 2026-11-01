@@ -23,7 +23,6 @@ import { Tournament, TournamentStatus } from '../types/tournament';
 
 interface HeroBannerProps {
   tournament: Tournament | null;
-  onOpenLookup: () => void;
   onQuickJoin: () => void;
 }
 
@@ -115,7 +114,6 @@ function formatKarachiDateTime(timestamp: number): string {
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
   tournament,
-  onOpenLookup,
   onQuickJoin
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);

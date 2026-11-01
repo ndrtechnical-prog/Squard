@@ -4,13 +4,11 @@ import { Tournament } from '../types/tournament';
 
 interface RoomAccessAlertProps {
   tournament: Tournament | null;
-  onOpenLookup: () => void;
   onOpenResults: () => void;
 }
 
 export const RoomAccessAlert: React.FC<RoomAccessAlertProps> = ({
   tournament,
-  onOpenLookup,
   onOpenResults
 }) => {
   const [copiedId, setCopiedId] = useState(false);
@@ -83,15 +81,6 @@ export const RoomAccessAlert: React.FC<RoomAccessAlertProps> = ({
                   Approved participants can unlock Room ID and Password by verifying their booking reference.
                 </p>
               </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={onOpenLookup}
-                className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-extrabold text-sm uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(0,240,255,0.4)]"
-              >
-                Reveal My Room ID & Password
-              </button>
             </div>
           </div>
         </div>

@@ -6,11 +6,9 @@ import { RoomAccessAlert } from './components/RoomAccessAlert';
 import { TeamCard } from './components/TeamCard';
 import { BookingModal } from './components/BookingModal';
 import { BookingSuccessModal } from './components/BookingSuccessModal';
-import { LookupModal } from './components/LookupModal';
 import { AdminPortalModal } from './components/AdminPortalModal';
 import { AdminOnScreenPanel } from './components/AdminOnScreenPanel';
 import { ResultsModal } from './components/ResultsModal';
-import { DepositModal } from './components/DepositModal';
 import { DrawerMenu } from './components/DrawerMenu';
 import { PinAuthModal } from './components/PinAuthModal';
 import { TournamentFeaturesModal, FeatureTab } from './components/TournamentFeaturesModal';
@@ -67,9 +65,6 @@ export default function App() {
 
   const [recentBooking, setRecentBooking] = useState<any>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
-
-  const [isLookupOpen, setIsLookupOpen] = useState(false);
-  const [lookupQuery, setLookupQuery] = useState('');
 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(() => {
@@ -398,7 +393,6 @@ export default function App() {
     setIsSuccessModalOpen(false);
     setRecentBooking(null);
     setIsDepositOpen(false);
-    setIsLookupOpen(false);
     setIsAdminOpen(false);
     setIsDrawerOpen(false);
     setIsResultsOpen(false);
@@ -936,14 +930,12 @@ export default function App() {
         {/* HERO BANNER WITH TOURNAMENT POSTER */}
         <HeroBanner
           tournament={tournament}
-          onOpenLookup={() => openWithHistory(() => setIsLookupOpen(true))}
           onQuickJoin={handleQuickJoin}
         />
 
         {/* ROOM CREDENTIALS / TIMELINE LIFECYCLE BAR */}
         <RoomAccessAlert
           tournament={tournament}
-          onOpenLookup={() => openWithHistory(() => setIsLookupOpen(true))}
           onOpenResults={() => openWithHistory(() => setIsResultsOpen(true))}
         />
 
@@ -1004,22 +996,6 @@ export default function App() {
           setIsSuccessModalOpen(false);
           setRecentBooking(null);
         }}
-        onOpenLookup={(trx) => {
-          setIsSuccessModalOpen(false);
-          setRecentBooking(null);
-          setLookupQuery(trx);
-          openWithHistory(() => setIsLookupOpen(true));
-        }}
-      />
-
-      {/* Lookup & Reveal Credentials Modal */}
-      <LookupModal
-        isOpen={isLookupOpen}
-        onClose={() => {
-          setIsLookupOpen(false);
-          setLookupQuery('');
-        }}
-        initialQuery={lookupQuery}
       />
 
       {/* Admin Portal Modal */}
@@ -1040,22 +1016,6 @@ export default function App() {
         onClose={() => setIsResultsOpen(false)}
       />
 
-      {/* Recharge Account Modal / Gateway (Redirects to https://fabulous-donut-2c074a.netlify.app/ with UID) */}
-      <DepositModal
-        isOpen={isDepositOpen}
-        onClose={() => {
-          setIsDepositOpen(false);
-          refreshUserBalance();
-        }}
-        currentBalance={userBalance}
-        pubgUid={savedPubgId}
-        playerName={savedPlayerName}
-        onBalanceUpdated={(newBal) => {
-          setUserBalance(newBal);
-          saveUserBalance(newBal);
-        }}
-      />
-
       {/* Drawer Menu */}
       <DrawerMenu
         isOpen={isDrawerOpen}
@@ -1064,7 +1024,6 @@ export default function App() {
         savedPubgId={savedPubgId}
         savedPlayerName={savedPlayerName}
         userBalance={userBalance}
-        onOpenLookup={() => openWithHistory(() => setIsLookupOpen(true))}
         onOpenResults={() => openWithHistory(() => setIsResultsOpen(true))}
         onOpenAdmin={() => openWithHistory(() => setIsAdminOpen(true))}
         onClearPubgId={handleClearPubgId}

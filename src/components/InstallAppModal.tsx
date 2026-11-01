@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Download, Smartphone, Share, PlusSquare, CheckCircle, ExternalLink, Sparkles } from 'lucide-react';
+import { X, Download, Smartphone, CheckCircle, Sparkles } from 'lucide-react';
 
 interface InstallAppModalProps {
   isOpen: boolean;
@@ -24,10 +24,12 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
         if (onInstallSuccess) onInstallSuccess();
         onClose();
       }
+    } else {
+      // Fallback if browser hasn't fired beforeinstallprompt yet
+      alert('To install Squard War on your device, tap your browser menu (⋮) and select "Install App" or "Add to Home Screen".');
+      onClose();
     }
   };
-
-  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   return (
     <div 
@@ -87,73 +89,37 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
           </div>
         </div>
 
-        {/* Direct Install Button (If supported by browser) */}
-        {deferredPrompt ? (
-          <div className="space-y-2">
-            <button
-              onClick={handleInstallClick}
-              className="w-full py-3 px-4 rounded-xl pubg-amber-glow-btn text-white text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 transition-all"
-            >
-              <Download className="w-4 h-4" />
-              <span>Install to Home Screen Now</span>
-            </button>
-            <p className="text-[11px] text-center text-amber-400/70 font-medium">
-              Installs like a native app without eating storage.
-            </p>
-          </div>
-        ) : isIOS ? (
-          /* iOS Safari Step-by-Step Instructions */
-          <div className="p-3.5 rounded-xl bg-[#140d07] border border-amber-800/50 space-y-2.5 text-xs">
-            <span className="font-bold text-amber-300 uppercase font-mono block">
-              How to Install on iPhone / iPad (Safari):
-            </span>
-            <div className="space-y-2 text-amber-100/90 text-[11px]">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
-                <span>Safari browser ke bottom bar mein <b>Share</b> button (<Share className="w-3.5 h-3.5 inline mx-0.5 text-amber-400" />) dabayein.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
-                <span>List mein niche scroll kar ke <b>"Add to Home Screen"</b> (<PlusSquare className="w-3.5 h-3.5 inline mx-0.5 text-amber-400" />) select karein.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-                <span>Top right par <b>"Add"</b> click karein. Squard War aapke phone par install ho jayegi!</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Android / Desktop Instructions */
-          <div className="p-3.5 rounded-xl bg-[#140d07] border border-amber-800/50 space-y-2.5 text-xs">
-            <span className="font-bold text-amber-300 uppercase font-mono block">
-              How to Install (Chrome / Android / PC):
-            </span>
-            <div className="space-y-2 text-amber-100/90 text-[11px]">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
-                <span>Chrome browser ke top right corner par <b>3 Dots (⋮)</b> menu dabayein.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
-                <span>Menu se <b>"Install App"</b> ya <b>"Add to Home screen"</b> select karein.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-                <span>Confirm karein aur Squard War direct aapki screen par install ho jayegi!</span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Direct Install Button */}
+        <div className="space-y-2 pt-2">
+          <button
+            onClick={handleInstallClick}
+            className="w-full py-3.5 px-4 rounded-xl pubg-amber-glow-btn text-white text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 transition-all"
+          >
+            <Download className="w-4 h-4" />
+            <span>Install App Now</span>
+          </button>
+          <p className="text-[11px] text-center text-amber-400/70 font-medium">
+            Installs instantly to your home screen like a native app.
+          </p>
+        </div>
 
         {/* Benefits list */}
-        <div className="pt-2 border-t border-amber-900/40 grid grid-cols-2 gap-2 text-[10px] text-amber-200/80">
+        <div className="pt-3 border-t border-amber-900/40 grid grid-cols-2 gap-2 text-[10px] text-amber-200/80">
           <div className="flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Fast Fullscreen Mode</span>
+            <span>One-Tap Launch</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Smartphone className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Fullscreen Experience</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Zero Storage Cost</span>
           </div>
           <div className="flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>1-Click Match Access</span>
+            <span>Instant Room Access</span>
           </div>
         </div>
       </div>
