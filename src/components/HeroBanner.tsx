@@ -16,13 +16,14 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  Flame,
   BellRing
 } from 'lucide-react';
-import { Tournament, TournamentStatus } from '../types/tournament';
+import { Tournament, TournamentStatus, GameType } from '../types/tournament';
 
 interface HeroBannerProps {
   tournament: Tournament | null;
+  activeGame?: GameType;
+  customBannerImage?: string;
   onQuickJoin: () => void;
 }
 
@@ -30,21 +31,18 @@ export interface BannerSlide {
   id: string;
   imageUrl: string;
   alt: string;
-  isComingSoon?: boolean;
 }
 
 const BANNER_SLIDES: BannerSlide[] = [
   {
     id: 'active_championship',
     imageUrl: 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
-    alt: 'PUBG Mobile Tournament Active Poster',
-    isComingSoon: false
+    alt: 'PUBG Mobile Tournament Active Poster'
   },
   {
     id: 'coming_soon_championship',
     imageUrl: 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000560881f4be40c9c8b3189a56.png',
-    alt: 'PUBG Mobile Upcoming Tournament',
-    isComingSoon: true
+    alt: 'PUBG Mobile Upcoming Tournament'
   }
 ];
 
@@ -76,6 +74,12 @@ export function parseKarachiTimestamp(dateStr?: string, timeStr?: string): numbe
 
   if (!rawTime) rawTime = DEFAULT_MATCH_TIME;
   if (!cleanDate) cleanDate = getTodayKarachiDate();
+
+  // Normalize date format if in DD-MM-YYYY or DD/MM/YYYY
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(cleanDate)) {
+    const parts = cleanDate.split(/[-/]/);
+    cleanDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  }
 
   // Support 12-hour AM/PM formats e.g. "11:00 PM", "2:30 am", "04:15 pm"
   const ampmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
@@ -114,22 +118,14 @@ function formatKarachiDateTime(timestamp: number): string {
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
   tournament,
+  activeGame,
+  customBannerImage,
   onQuickJoin
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imagesLoaded, setImagesLoaded] = useState<Record<number, boolean>>({});
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-
-  // Authoritative server clock offset
-  const serverOffsetRef = useRef<number>(0);
-  useEffect(() => {
-    if (tournament?.serverTime) {
-      serverOffsetRef.current = tournament.serverTime - Date.now();
-    }
-  }, [tournament?.serverTime]);
-
-  const getServerNow = () => Date.now() + serverOffsetRef.current;
 
   // Active match configuration (recalculates dynamically whenever tournament matchDate or matchTime updates)
   const matchStartTime = (tournament?.matchDate && tournament?.matchTime)
@@ -178,10 +174,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     setCurrentSlide((prev) => (prev + 1) % BANNER_SLIDES.length);
   }, []);
 
-  // Master Clock & Phase Calculation
+  // Master Clock & Phase Calculation using direct epoch time without stale offset drift
   useEffect(() => {
     const tick = () => {
-      const now = getServerNow();
+      const now = Date.now();
 
       // 1. Before Match Countdown
       const diffToStart = matchStartTime - now;
@@ -196,30 +192,43 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       }
 
       // 2. 15-Minute Room Window Timer
-      const diffToEndWindow = roomEndTime - now;
-      if (diffToEndWindow > 0 && diffToStart <= 0) {
-        setRoomWindowSecondsLeft(Math.floor(diffToEndWindow / 1000));
+      if (tournament?.manualStatus === 'ROOM_OPEN') {
+        const diffToEnd = matchStartTime > now ? Math.floor((matchStartTime - now) / 1000) : (15 * 60);
+        setRoomWindowSecondsLeft(diffToEnd > 0 ? diffToEnd : 15 * 60);
       } else {
-        setRoomWindowSecondsLeft(0);
+        const diffToEndWindow = roomEndTime - now;
+        if (diffToEndWindow > 0 && diffToStart <= 0) {
+          setRoomWindowSecondsLeft(Math.floor(diffToEndWindow / 1000));
+        } else {
+          setRoomWindowSecondsLeft(0);
+        }
       }
     };
 
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [matchStartTime, roomEndTime]);
+  }, [matchStartTime, roomEndTime, tournament?.manualStatus]);
 
   // Determine current lifecycle phase
   type MatchPhase = 'BEFORE_MATCH' | 'ROOM_WINDOW' | 'MATCH_LIVE' | 'MATCH_ENDED';
 
   const getPhase = (): MatchPhase => {
-    if (tournament?.manualStatus === 'LIVE') return 'MATCH_LIVE';
-    if (tournament?.manualStatus === 'COMPLETED') return 'MATCH_ENDED';
+    // 1. Manual Admin Overrides (Directly honours Admin Room Open, Live, Ended)
+    if (tournament?.manualStatus === 'ROOM_OPEN' || tournament?.status === 'ROOM_OPEN') return 'ROOM_WINDOW';
+    if (tournament?.manualStatus === 'LIVE' || tournament?.manualStatus === 'MATCH_LIVE') return 'MATCH_LIVE';
+    if (tournament?.manualStatus === 'COMPLETED' || tournament?.manualStatus === 'WAIT_FOR_RESULT') return 'MATCH_ENDED';
 
-    const now = getServerNow();
-    if (now < matchStartTime) return 'BEFORE_MATCH';
-    if (now >= matchStartTime && now < roomEndTime) return 'ROOM_WINDOW';
-    if (now >= roomEndTime && now < matchEndTime) return 'MATCH_LIVE';
+    // 2. Automatic Clock Calculation
+    const now = Date.now();
+    if (now < matchStartTime) {
+      const roomOpen = (typeof tournament?.roomOpenTime === 'number' && tournament.roomOpenTime > 0)
+        ? tournament.roomOpenTime
+        : (matchStartTime - 15 * 60 * 1000);
+      if (now >= roomOpen) return 'ROOM_WINDOW';
+      return 'BEFORE_MATCH';
+    }
+    if (now >= matchStartTime && now < matchEndTime) return 'MATCH_LIVE';
     return 'MATCH_ENDED';
   };
 
@@ -314,7 +323,17 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 )}
 
                 <img
-                  src={slide.imageUrl}
+                  src={
+                    customBannerImage || (
+                      activeGame === 'FREE_FIRE' 
+                        ? 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/images%20(6).jpeg'
+                        : tournament?.id === 'PUBG_LIVIK'
+                          ? 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_0000000076e081f78464dd659a240b41.png'
+                          : tournament?.id === 'PUBG_TDM'
+                            ? 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000560881f4be40c9c8b3189a56.png'
+                            : slide.imageUrl
+                    )
+                  }
                   alt={slide.alt}
                   onLoad={() => setImagesLoaded(prev => ({ ...prev, [index]: true }))}
                   className={`w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ${
@@ -324,35 +343,12 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
                 {/* Bottom-to-Top Gradient Shade Overlay on Image */}
                 <div className="absolute inset-x-0 bottom-0 h-48 sm:h-56 bg-gradient-to-t from-black via-black/95 to-transparent pointer-events-none" />
-
-                {/* SLIDE 2: COMING SOON BADGE / BUTTON OVERLAY */}
-                {slide.isComingSoon && isActive && (
-                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 bg-black/35 backdrop-blur-[1px]">
-                    <div className="flex flex-col items-center text-center space-y-3 animate-in zoom-in-95 duration-300">
-                      
-                      {/* Pulsing Glow Ring */}
-                      <div className="relative group/btn">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 rounded-2xl blur opacity-75 group-hover/btn:opacity-100 animate-pulse transition duration-500" />
-                        
-                        {/* Prominent Coming Soon Button */}
-                        <div className="relative px-6 sm:px-9 py-3 sm:py-4 rounded-xl bg-gradient-to-r from-[#2a1708] via-[#1a0e05] to-[#2a1708] border-2 border-amber-400/90 text-white shadow-[0_0_35px_rgba(245,158,11,0.6)] flex items-center gap-2.5 select-none">
-                          <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400 animate-bounce" />
-                          <span className="font-heading font-black text-lg sm:text-2xl tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-white to-amber-300 drop-shadow-[0_2px_10px_rgba(245,158,11,0.9)]">
-                            Coming Soon
-                          </span>
-                          <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 animate-spin" style={{ animationDuration: '4s' }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
 
-          {/* OVERLAY CONTENT (Active Match Countdown / Room Info - Shown on Slide 0) */}
-          {currentSlide === 0 && (
-            <div className="absolute inset-x-0 bottom-0 p-3 sm:p-5 z-20 flex flex-col gap-2.5 pointer-events-auto">
+          {/* OVERLAY CONTENT (Active Match Countdown / Room Info - Always Visible) */}
+          <div className="absolute inset-x-0 bottom-0 p-3 sm:p-5 z-20 flex flex-col gap-2.5 pointer-events-auto">
               
               {/* Header Line: Label / Status + Asia/Karachi Time Indicator */}
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -594,7 +590,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 </div>
               )}
             </div>
-          )}
         </div>
 
         {/* Carousel Bottom Dot Indicators */}

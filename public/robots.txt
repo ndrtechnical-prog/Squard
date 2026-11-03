@@ -1,5 +1,10 @@
+# Robots.txt for SquadWar Esports Platform (squardwar.site / squadwar.site)
 User-agent: *
 Allow: /
+
+# Disallow internal backend API endpoints and sensitive actions
 Disallow: /api/
 
+# Sitemap directive
+Sitemap: https://squardwar.site/sitemap.xml
 Sitemap: https://squadwar.site/sitemap.xml

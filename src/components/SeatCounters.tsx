@@ -1,20 +1,29 @@
 import React from 'react';
-import { Trophy, Bell, Star } from 'lucide-react';
+import { Trophy, CreditCard, Star, BellRing } from 'lucide-react';
+import { GameType } from '../types/tournament';
 
 interface SeatCountersProps {
+  activeGame?: GameType;
   onOpenReward: () => void;
-  onOpenNotices: () => void;
+  onOpenCashout: () => void;
+  onOpenNotices?: () => void;
   onOpenReviews: () => void;
 }
 
 export const SeatCounters: React.FC<SeatCountersProps> = ({
+  activeGame = 'PUBG',
   onOpenReward,
+  onOpenCashout,
   onOpenNotices,
   onOpenReviews
 }) => {
+  const isFreeFire = activeGame === 'FREE_FIRE';
+
   return (
     <div className="w-full my-4">
-      {/* 3 ICON BUTTONS IN EASYPAISA STYLE (REWARD · NOTICES · REVIEWS) */}
+      {/* 3 ICON BUTTONS IN EASYPAISA STYLE:
+          PUBG: REWARD · NOTICES · REVIEWS
+          FREE FIRE: REWARD · CASHOUT · REVIEWS */}
       <div className="relative rounded-2xl bg-gradient-to-r from-[#0a1220]/90 via-[#070d18]/95 to-[#0a1220]/90 border border-slate-800/80 p-3.5 sm:p-4 shadow-xl backdrop-blur-md">
         <div className="grid grid-cols-3 gap-2 sm:gap-6 max-w-md mx-auto">
           
@@ -24,31 +33,52 @@ export const SeatCounters: React.FC<SeatCountersProps> = ({
             onClick={onOpenReward}
             className="group flex flex-col items-center justify-center gap-2 p-2 rounded-2xl hover:bg-slate-800/40 active:scale-95 transition-all duration-200 cursor-pointer"
           >
-            <div className="relative w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-emerald-400 via-teal-500 to-emerald-700 flex items-center justify-center shadow-[0_6px_20px_rgba(16,185,129,0.35)] group-hover:shadow-[0_8px_25px_rgba(16,185,129,0.55)] group-hover:-translate-y-1 transition-all duration-200 border border-emerald-300/40">
+            <div className={`relative w-13 h-13 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-200 border ${
+              isFreeFire 
+                ? 'bg-gradient-to-br from-amber-500 via-orange-500 to-red-600 border-orange-300/40 shadow-orange-500/35'
+                : 'bg-gradient-to-br from-emerald-400 via-teal-500 to-emerald-700 border-emerald-300/40 shadow-emerald-500/35'
+            } group-hover:-translate-y-1`}>
               <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]" />
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 border border-black animate-pulse" />
             </div>
             
-            <span className="font-heading font-black text-[11px] sm:text-xs text-slate-100 group-hover:text-emerald-300 tracking-wider uppercase transition-colors text-center">
+            <span className="font-heading font-black text-[11px] sm:text-xs text-slate-100 group-hover:text-amber-300 tracking-wider uppercase transition-colors text-center">
               REWARD
             </span>
           </button>
 
-          {/* 2. NOTICES BUTTON (Replaced Top Player as requested) */}
-          <button
-            type="button"
-            onClick={onOpenNotices}
-            className="group flex flex-col items-center justify-center gap-2 p-2 rounded-2xl hover:bg-slate-800/40 active:scale-95 transition-all duration-200 cursor-pointer"
-          >
-            <div className="relative w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-[0_6px_20px_rgba(245,158,11,0.35)] group-hover:shadow-[0_8px_25px_rgba(245,158,11,0.55)] group-hover:-translate-y-1 transition-all duration-200 border border-amber-200/40">
-              <Bell className="w-6 h-6 sm:w-8 sm:h-8 text-black drop-shadow-[0_2px_6px_rgba(0,0,0,0.2)]" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 border border-black animate-ping" />
-            </div>
+          {/* 2. CENTER BUTTON: CASHOUT in Free Fire, NOTICES (Notice Board) in PUBG */}
+          {isFreeFire ? (
+            <button
+              type="button"
+              onClick={onOpenCashout}
+              className="group flex flex-col items-center justify-center gap-2 p-2 rounded-2xl hover:bg-slate-800/40 active:scale-95 transition-all duration-200 cursor-pointer"
+            >
+              <div className="relative w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-[0_6px_20px_rgba(245,158,11,0.35)] group-hover:shadow-[0_8px_25px_rgba(245,158,11,0.55)] group-hover:-translate-y-1 transition-all duration-200 border border-amber-200/40">
+                <CreditCard className="w-6 h-6 sm:w-8 sm:h-8 text-black drop-shadow-[0_2px_6px_rgba(0,0,0,0.2)]" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border border-black animate-pulse" />
+              </div>
 
-            <span className="font-heading font-black text-[11px] sm:text-xs text-slate-100 group-hover:text-amber-300 tracking-wider uppercase transition-colors text-center">
-              NOTICES
-            </span>
-          </button>
+              <span className="font-heading font-black text-[11px] sm:text-xs text-slate-100 group-hover:text-amber-300 tracking-wider uppercase transition-colors text-center">
+                CASHOUT
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenNotices || onOpenCashout}
+              className="group flex flex-col items-center justify-center gap-2 p-2 rounded-2xl hover:bg-slate-800/40 active:scale-95 transition-all duration-200 cursor-pointer"
+            >
+              <div className="relative w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-[0_6px_20px_rgba(245,158,11,0.35)] group-hover:shadow-[0_8px_25px_rgba(245,158,11,0.55)] group-hover:-translate-y-1 transition-all duration-200 border border-amber-200/40">
+                <BellRing className="w-6 h-6 sm:w-8 sm:h-8 text-black drop-shadow-[0_2px_6px_rgba(0,0,0,0.2)]" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 border border-black animate-ping" />
+              </div>
+
+              <span className="font-heading font-black text-[11px] sm:text-xs text-slate-100 group-hover:text-amber-300 tracking-wider uppercase transition-colors text-center">
+                NOTICES
+              </span>
+            </button>
+          )}
 
           {/* 3. REVIEWS BUTTON */}
           <button
@@ -58,7 +88,6 @@ export const SeatCounters: React.FC<SeatCountersProps> = ({
           >
             <div className="relative w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-rose-500 via-pink-500 to-amber-500 flex items-center justify-center shadow-[0_6px_20px_rgba(244,63,94,0.35)] group-hover:shadow-[0_8px_25px_rgba(244,63,94,0.55)] group-hover:-translate-y-1 transition-all duration-200 border border-rose-300/40">
               <Star className="w-6 h-6 sm:w-8 sm:h-8 text-white fill-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.3)]" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border border-black animate-pulse" />
             </div>
 
             <span className="font-heading font-black text-[11px] sm:text-xs text-slate-100 group-hover:text-rose-300 tracking-wider uppercase transition-colors text-center">

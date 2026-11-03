@@ -20,8 +20,10 @@ export const RoomAccessAlert: React.FC<RoomAccessAlertProps> = ({
 
     const tick = () => {
       const now = Date.now();
-      // If room is open, calculate seconds until matchStartTime
-      if (now >= tournament.roomOpenTime && now < tournament.matchStartTime) {
+      if (tournament.manualStatus === 'ROOM_OPEN') {
+        const remaining = tournament.matchStartTime > now ? Math.floor((tournament.matchStartTime - now) / 1000) : (15 * 60);
+        setWindowRemaining(remaining > 0 ? remaining : 15 * 60);
+      } else if (now >= tournament.roomOpenTime && now < tournament.matchStartTime) {
         setWindowRemaining(Math.max(0, Math.floor((tournament.matchStartTime - now) / 1000)));
       } else {
         setWindowRemaining(0);
@@ -31,15 +33,15 @@ export const RoomAccessAlert: React.FC<RoomAccessAlertProps> = ({
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [tournament?.roomOpenTime, tournament?.matchStartTime]);
+  }, [tournament?.roomOpenTime, tournament?.matchStartTime, tournament?.manualStatus]);
 
   if (!tournament) return null;
 
   const now = Date.now();
-  const isRoomOpen = now >= tournament.roomOpenTime && now < tournament.matchStartTime;
-  const isMatchLive = now >= tournament.matchStartTime && now < tournament.matchEndTime;
-  const isWaitingResult = tournament.status === 'WAIT_FOR_RESULT' || (now >= tournament.matchEndTime && tournament.status !== 'COMPLETED');
-  const isCompleted = tournament.status === 'COMPLETED';
+  const isRoomOpen = tournament.manualStatus === 'ROOM_OPEN' || tournament.status === 'ROOM_OPEN' || (now >= tournament.roomOpenTime && now < tournament.matchStartTime);
+  const isMatchLive = tournament.manualStatus === 'MATCH_LIVE' || tournament.manualStatus === 'LIVE' || (tournament.manualStatus === 'AUTO' && now >= tournament.matchStartTime && now < tournament.matchEndTime);
+  const isWaitingResult = tournament.manualStatus === 'WAIT_FOR_RESULT' || tournament.status === 'WAIT_FOR_RESULT' || (tournament.manualStatus === 'AUTO' && now >= tournament.matchEndTime && tournament.status !== 'COMPLETED');
+  const isCompleted = tournament.manualStatus === 'COMPLETED' || tournament.status === 'COMPLETED';
 
   const formatMinSec = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -78,8 +80,39 @@ export const RoomAccessAlert: React.FC<RoomAccessAlertProps> = ({
                   15-Minute Game Lobby Access Window Active
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Approved participants can unlock Room ID and Password by verifying their booking reference.
+                  Custom match room is open. Copy Room ID and Password to enter game lobby.
                 </p>
+              </div>
+            </div>
+
+            {/* Quick Room ID & Password Display with 1-Click Copy */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full md:w-auto">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-black/85 border border-cyan-500/60 shadow-md">
+                <div>
+                  <span className="text-[9px] text-cyan-400 font-mono font-bold uppercase block leading-none">Room ID</span>
+                  <span className="font-mono text-sm font-black text-white select-all">{tournament.roomId || '69151604'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(tournament.roomId || '69151604', 'id')}
+                  className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold uppercase cursor-pointer transition-colors shadow"
+                >
+                  {copiedId ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-black/85 border border-cyan-500/60 shadow-md">
+                <div>
+                  <span className="text-[9px] text-cyan-400 font-mono font-bold uppercase block leading-none">Password</span>
+                  <span className="font-mono text-sm font-black text-white select-all">{tournament.roomPassword || '1234'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(tournament.roomPassword || '1234', 'pass')}
+                  className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold uppercase cursor-pointer transition-colors shadow"
+                >
+                  {copiedPass ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
               </div>
             </div>
           </div>

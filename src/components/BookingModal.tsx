@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
-  Minus, 
-  Plus, 
   AlertCircle, 
-  Users,
-  CheckCircle2,
-  ArrowRight,
-  Crown
+  CheckCircle2, 
+  ArrowRight, 
+  Crown 
 } from 'lucide-react';
-import { Team } from '../types/tournament';
+import { Team, GameType } from '../types/tournament';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -21,6 +18,8 @@ interface BookingModalProps {
   userBalance: number;
   savedPubgId?: string;
   savedPlayerName?: string;
+  activeGame?: GameType;
+  isTdm?: boolean;
   onConfirmBooking: (teamNumber: number, seatNumbers: number[], players: { pubgId: string; name: string; avatarUrl?: string }[]) => void;
   onOpenRecharge: () => void;
 }
@@ -28,17 +27,19 @@ interface BookingModalProps {
 export const BookingModal: React.FC<BookingModalProps> = ({
   isOpen,
   onClose,
+  tournamentId,
   teams,
   initialTeamNumber,
   initialSeatNumber,
   userBalance,
   savedPubgId,
   savedPlayerName,
+  activeGame,
+  isTdm,
   onConfirmBooking,
   onOpenRecharge
 }) => {
   const [selectedTeamNumber, setSelectedTeamNumber] = useState(initialTeamNumber);
-  const [seatCount, setSeatCount] = useState(1);
   const [playersData, setPlayersData] = useState<{ pubgId: string; name: string }[]>([
     {
       pubgId: savedPubgId || '',
@@ -47,20 +48,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   ]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Find the selected team
-  const currentTeam = teams.find(t => t.teamNumber === selectedTeamNumber) || teams[0];
-  
-  // Available seats in this team
-  const availableSeats = currentTeam 
-    ? currentTeam.seats.filter(s => s.status === 'AVAILABLE')
-    : [];
-
-  const maxSeatsAllowed = Math.min(4, Math.max(1, availableSeats.length));
-
   useEffect(() => {
     if (isOpen) {
       setSelectedTeamNumber(initialTeamNumber);
-      setSeatCount(1);
       setPlayersData([
         {
           pubgId: savedPubgId || '',
@@ -71,25 +61,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
   }, [isOpen, initialTeamNumber, initialSeatNumber, savedPubgId, savedPlayerName]);
 
-  // Handle seat increment / decrement
-  const handleSeatChange = (newCount: number) => {
-    if (newCount < 1 || newCount > maxSeatsAllowed) return;
-    setSeatCount(newCount);
-
-    // Resize players data array
-    setPlayersData(prev => {
-      const copy = [...prev];
-      if (newCount > copy.length) {
-        while (copy.length < newCount) {
-          copy.push({ pubgId: '', name: '' });
-        }
-      } else if (newCount < copy.length) {
-        return copy.slice(0, newCount);
-      }
-      return copy;
-    });
-  };
-
   const updatePlayerField = (index: number, field: 'pubgId' | 'name', value: string) => {
     setPlayersData(prev => {
       const copy = [...prev];
@@ -98,36 +69,56 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     });
   };
 
-  // 150 Diamonds per seat
-  const totalDiamonds = seatCount * 150;
-  const hasSufficientBalance = userBalance >= totalDiamonds;
+  const currentTeam = teams.find(t => t.teamNumber === selectedTeamNumber) || teams[0];
+  const isTdmMatch = Boolean(isTdm || tournamentId === 'PUBG_TDM' || teams.length === 2);
+  const isDuo = !isTdmMatch && currentTeam?.seats?.length === 2;
+  const totalDiamonds = isTdmMatch ? 0 : (isDuo ? 300 : 600);
+  const hasSufficientBalance = isTdmMatch ? true : (userBalance >= totalDiamonds);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    // 1. Check PUBG ID filled for all seats
-    for (let i = 0; i < seatCount; i++) {
-      if (!playersData[i].pubgId.trim()) {
-        setErrorMessage(`Please enter PUBG ID for Player ${i + 1}.`);
+    const captainUid = playersData[0]?.pubgId.trim();
+    if (!captainUid) {
+      setErrorMessage(`Please enter ${isTdmMatch ? 'your' : 'Captain'} ${activeGame === 'FREE_FIRE' ? 'Free Fire ID / UID' : 'PUBG ID'}.`);
+      return;
+    }
+
+    // STRICT SINGLE-ENTRY & DUPLICATE UID ENFORCEMENT FOR TEAM DEATH MATCH (TDM)
+    // "Team death match ki entry free rakho eik person sirf eik bar join hoske matlab Same uid se again join na how"
+    if (isTdmMatch) {
+      const isAlreadyRegistered = teams.some(t =>
+        t.seats?.some(s =>
+          (s.status === 'APPROVED' || s.status === 'RESERVED_PENDING') &&
+          s.playerUid &&
+          s.playerUid.trim().toLowerCase() === captainUid.toLowerCase()
+        )
+      );
+
+      if (isAlreadyRegistered) {
+        setErrorMessage(`⚠️ Duplicate Entry Blocked: Yeh PUBG UID (${captainUid}) pehle se hi Team Death Match me registered hai! Eik person / UID sirf eik baar hi join ho sakta hai.`);
         return;
       }
     }
 
-    // 2. CHECK BALANCE
-    if (!hasSufficientBalance) {
-      setErrorMessage(`Insufficient Balance! You currently have ${userBalance} 💎, but reserving ${seatCount} seat(s) requires ${totalDiamonds} 💎 (Shortage: ${totalDiamonds - userBalance} 💎). Please recharge your account first.`);
+    // CHECK BALANCE (only for paid matches)
+    if (!isTdmMatch && !hasSufficientBalance) {
+      setErrorMessage(`Insufficient Balance! You currently have ${userBalance} 💎, but booking requires ${totalDiamonds} 💎 (Shortage: ${totalDiamonds - userBalance} 💎). Please recharge your account first.`);
       return;
     }
 
-    // Pick the seat numbers to reserve
-    const seatsToReserve = availableSeats.slice(0, seatCount).map(s => s.seatNumber);
+    // In TDM, only the single clicked seat is reserved! In Duo, [1, 2]. In Squad, [1, 2, 3, 4]
+    const seatsToReserve = isTdmMatch ? [initialSeatNumber || 1] : (isDuo ? [1, 2] : [1, 2, 3, 4]);
 
-    const playersList = playersData.map((player) => ({
-      pubgId: player.pubgId.trim(),
-      name: player.name.trim() || `Player_${player.pubgId.slice(-4)}`,
-      avatarUrl: '/images/avatars/pubg_avatar_golden_1792656009701.jpg'
-    }));
+    const playerName = playersData[0]?.name.trim() || `${isTdmMatch ? 'Player' : 'Captain'}_${captainUid.slice(-4)}`;
+    const playersList = [
+      {
+        pubgId: captainUid,
+        name: playerName,
+        avatarUrl: '/images/avatars/pubg_avatar_golden_1792656009701.jpg'
+      }
+    ];
 
     onConfirmBooking(selectedTeamNumber, seatsToReserve, playersList);
     onClose();
@@ -141,19 +132,26 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-xl bg-gradient-to-b from-[#0c162c] to-[#070d1a] border border-cyan-500/50 rounded-2xl shadow-[0_0_40px_rgba(0,240,255,0.25)] overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-xl bg-gradient-to-b from-[#0c162c] to-[#070e1a] border border-cyan-500/50 rounded-2xl shadow-[0_0_40px_rgba(0,240,255,0.25)] overflow-hidden my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-cyan-900/60 bg-[#091122]/90">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 font-bold font-mono text-sm">
-              T{selectedTeamNumber}
+            <div className={`w-9 h-9 rounded-xl ${isTdmMatch ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-amber-500/20 border-amber-500/50 text-amber-400'} border flex items-center justify-center font-bold font-mono text-sm`}>
+              {isTdmMatch ? `S${initialSeatNumber || 1}` : `T${selectedTeamNumber}`}
             </div>
             <div>
               <h2 className="font-heading text-xl font-bold text-white tracking-wide">
-                Join Team {selectedTeamNumber}
+                {isTdmMatch 
+                  ? `Join ${currentTeam?.name || `Team ${selectedTeamNumber}`} (Slot ${initialSeatNumber || 1})` 
+                  : `Book ${isDuo ? 'Duo' : 'Squad'} Box - Team ${selectedTeamNumber}`}
               </h2>
+              <p className={`text-[11px] font-mono ${isTdmMatch ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {isTdmMatch 
+                  ? 'Team Death Match • 100% Free Entry • 1 Slot Per Person' 
+                  : (isDuo ? 'Livik Duo Match • 2 Slots Reserved (300 💎)' : `${activeGame === 'FREE_FIRE' ? 'Free Fire Clash Squad' : 'PUBG Mobile Squad'} • 4 Slots Reserved (600 💎)`)}
+              </p>
             </div>
           </div>
 
@@ -175,91 +173,87 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </div>
           )}
 
-          {/* Seats Counter */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Seats
-            </span>
+          {/* SQUAD / DUO / TDM SUMMARY NOTICE */}
+          {isTdmMatch ? (
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-slate-900/80 to-teal-500/15 border border-emerald-500/50 text-xs text-emerald-200 space-y-1">
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1.5 text-white">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Team Death Match (TDM 4v4)</span>
+                </span>
+                <span className="text-emerald-400 font-mono font-black text-sm uppercase px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/60">
+                  Free Entry (0 💎)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                ⚡ <span className="font-bold text-amber-300">Strict Rule:</span> Eik person sirf eik baar join ho sakta hai (Same UID se again join nahi ho sakta). Winner Team Cash: <span className="text-emerald-300 font-bold">PKR 1,000</span>!
+              </p>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-slate-900/80 to-cyan-500/15 border border-amber-500/40 text-xs text-amber-200 space-y-1">
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1.5 text-white">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <span>Entire {isDuo ? 'Duo Box (2 Slots)' : 'Squad Box (4 Slots)'} Booking</span>
+                </span>
+                <span className="text-amber-400 font-mono font-black text-sm">{totalDiamonds} 💎</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                {isDuo 
+                  ? 'Booking reserves both 2 duo seats (Seat 1 Captain + Seat 2 Partner). Enter your Captain details below:'
+                  : 'Booking reserves all 4 squad seats (Seat 1 Captain + Seats 2, 3, 4). Enter your Captain details below:'}
+              </p>
+            </div>
+          )}
 
-            {/* Minus - Count - Plus Controls */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => handleSeatChange(seatCount - 1)}
-                disabled={seatCount <= 1}
-                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-cyan-950 text-cyan-400 hover:text-white border border-slate-700 hover:border-cyan-500/50 flex items-center justify-center disabled:opacity-40 disabled:pointer-events-none transition-all active:scale-95 cursor-pointer"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
+          {/* CAPTAIN / PLAYER INPUT BOX */}
+          <div className="space-y-3">
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5 hover:border-cyan-800/60 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold flex items-center gap-1.5 font-mono">
+                  {isTdmMatch ? (
+                    <span className="flex items-center gap-1 text-emerald-300 font-bold">
+                      👤 Player Slot #{initialSeatNumber || 1}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-amber-300 font-bold">
+                      <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> Captain (Slot 1)
+                    </span>
+                  )}
+                </span>
+                <span className={`text-[10px] uppercase font-mono ${isTdmMatch ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {isTdmMatch ? '1 Slot (Free Entry)' : (isDuo ? 'Both 2 Slots' : 'All 4 Slots')}
+                </span>
+              </div>
 
-              <span className="w-10 text-center font-heading text-2xl font-black text-white font-mono">
-                {seatCount}
-              </span>
+              {/* UID & Name Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <input
+                    type="text"
+                    value={playersData[0]?.pubgId || ''}
+                    onChange={(e) => updatePlayerField(0, 'pubgId', e.target.value)}
+                    placeholder={activeGame === 'FREE_FIRE' ? "Enter Free Fire ID / UID" : "Enter PUBG ID"}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 focus:border-cyan-400 text-xs font-mono text-white placeholder-slate-500 outline-none"
+                    required
+                  />
+                </div>
 
-              <button
-                type="button"
-                onClick={() => handleSeatChange(seatCount + 1)}
-                disabled={seatCount >= maxSeatsAllowed}
-                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-cyan-950 text-cyan-400 hover:text-white border border-slate-700 hover:border-cyan-500/50 flex items-center justify-center disabled:opacity-40 disabled:pointer-events-none transition-all active:scale-95 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+                <div>
+                  <input
+                    type="text"
+                    value={playersData[0]?.name || ''}
+                    onChange={(e) => updatePlayerField(0, 'name', e.target.value)}
+                    placeholder={isTdmMatch ? "Player In-Game Name (IGN)" : "Captain In-Game Name (IGN)"}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 focus:border-cyan-400 text-xs text-white placeholder-slate-500 outline-none"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* DYNAMIC PUBG ID INPUT BOXES */}
-          <div className="space-y-3">
-            {playersData.map((player, idx) => (
-              <div 
-                key={idx}
-                className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5 hover:border-cyan-800/60 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold flex items-center gap-1.5 font-mono">
-                    {idx === 0 ? (
-                      <span className="flex items-center gap-1 text-amber-300 font-bold">
-                        <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> Captain (Player 1)
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-cyan-400">
-                        <Users className="w-3.5 h-3.5" /> Player {idx + 1}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[10px] text-slate-500 uppercase font-mono">
-                    Seat #{availableSeats[idx]?.seatNumber ?? idx + 1}
-                  </span>
-                </div>
-
-                {/* UID & Name Inputs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      value={player.pubgId}
-                      onChange={(e) => updatePlayerField(idx, 'pubgId', e.target.value)}
-                      placeholder="Enter PUBG ID"
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 focus:border-cyan-400 text-xs font-mono text-white placeholder-slate-500 outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      value={player.name}
-                      onChange={(e) => updatePlayerField(idx, 'name', e.target.value)}
-                      placeholder={idx === 0 ? "Player 1 Username (IGN)" : "Player In-Game Name (IGN)"}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 focus:border-cyan-400 text-xs text-white placeholder-slate-500 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Insufficient Balance Notice if low */}
-          {!hasSufficientBalance && (
+          {/* Insufficient Balance Notice if low (only for non-TDM matches) */}
+          {!isTdmMatch && !hasSufficientBalance && (
             <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/60 text-xs text-red-200 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
@@ -288,13 +282,21 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               Cancel
             </button>
 
-            {hasSufficientBalance ? (
+            {isTdmMatch ? (
+              <button
+                type="submit"
+                className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Join TDM (Free Entry)</span>
+              </button>
+            ) : hasSufficientBalance ? (
               <button
                 type="submit"
                 className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Book Now ({totalDiamonds} 💎)</span>
+                <span>{activeGame === 'FREE_FIRE' ? `Book Squad Box (${totalDiamonds} 💎)` : `Book Now (${totalDiamonds} 💎)`}</span>
               </button>
             ) : (
               <button

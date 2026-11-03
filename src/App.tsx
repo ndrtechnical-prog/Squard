@@ -4,6 +4,7 @@ import { HeroBanner } from './components/HeroBanner';
 import { SeatCounters } from './components/SeatCounters';
 import { RoomAccessAlert } from './components/RoomAccessAlert';
 import { TeamCard } from './components/TeamCard';
+import { MatchListSection } from './components/MatchListSection';
 import { BookingModal } from './components/BookingModal';
 import { BookingSuccessModal } from './components/BookingSuccessModal';
 import { AdminPortalModal } from './components/AdminPortalModal';
@@ -15,22 +16,102 @@ import { TournamentFeaturesModal, FeatureTab } from './components/TournamentFeat
 import { NoticeBanner, NoticeData } from './components/NoticeBanner';
 import { NoticesModal } from './components/NoticesModal';
 import { InstallAppModal } from './components/InstallAppModal';
-import { Tournament, GameType, PaymentAccount } from './types/tournament';
+import { Tournament, TournamentStatus, GameType, PaymentAccount, PubgMatchId } from './types/tournament';
 import { 
   loadStoredTournament, 
   saveStoredTournament, 
   loadUserBalance, 
   saveUserBalance,
   defaultPaymentAccounts,
-  mergeTournamentWithFirebase
+  mergeTournamentWithFirebase,
+  getInitialErangelTournament,
+  getInitialLivikTournament,
+  getInitialTdmTournament,
+  getInitialFreeFireTournament,
+  MATCH_IMAGES
 } from './utils/storage';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ArrowLeft } from 'lucide-react';
 
 export default function App() {
   const [activeGame, setActiveGame] = useState<GameType>('PUBG');
+  const [selectedMatch, setSelectedMatch] = useState<PubgMatchId | 'FREE_FIRE' | null>(null);
   
-  // Initialize with local stored tournament (25 teams + requested players) so it NEVER fails on render!
-  const [tournament, setTournament] = useState<Tournament>(() => loadStoredTournament());
+  // Independent tournament states for each match
+  const [erangelTournament, setErangelTournament] = useState<Tournament>(() => {
+    try {
+      const s = localStorage.getItem('pubg_tournament_erangel_v1') || localStorage.getItem('pubg_arena_tournament_v2');
+      if (s) {
+        const p = JSON.parse(s);
+        if (p?.teams?.length >= 25) return p;
+      }
+    } catch {}
+    return getInitialErangelTournament();
+  });
+
+  const [livikTournament, setLivikTournament] = useState<Tournament>(() => {
+    try {
+      const s = localStorage.getItem('pubg_tournament_livik_v1');
+      if (s) {
+        const p = JSON.parse(s);
+        if (p?.teams?.length >= 30) return p;
+      }
+    } catch {}
+    return getInitialLivikTournament();
+  });
+
+  const [tdmTournament, setTdmTournament] = useState<Tournament>(() => {
+    try {
+      const s = localStorage.getItem('pubg_tournament_tdm_v1');
+      if (s) {
+        const p = JSON.parse(s);
+        if (p?.teams?.length >= 2) return p;
+      }
+    } catch {}
+    return getInitialTdmTournament();
+  });
+
+  const [freeFireTournament, setFreeFireTournament] = useState<Tournament>(() => {
+    const saved = localStorage.getItem('pubg_arena_freefire_tournament_v1');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return getInitialFreeFireTournament();
+  });
+
+  // Current active tournament depending on selected match or game mode
+  const tournament = (activeGame === 'FREE_FIRE' || selectedMatch === 'FREE_FIRE')
+    ? freeFireTournament
+    : (selectedMatch === 'LIVIK' 
+        ? livikTournament 
+        : (selectedMatch === 'TDM' ? tdmTournament : erangelTournament));
+
+  const setTournament = (update: Tournament | ((prev: Tournament) => Tournament)) => {
+    const newT = typeof update === 'function' ? update(tournament) : update;
+    if (activeGame === 'FREE_FIRE' || selectedMatch === 'FREE_FIRE') {
+      setFreeFireTournament(newT);
+      localStorage.setItem('pubg_arena_freefire_tournament_v1', JSON.stringify(newT));
+    } else if (selectedMatch === 'LIVIK') {
+      setLivikTournament(newT);
+      localStorage.setItem('pubg_tournament_livik_v1', JSON.stringify(newT));
+    } else if (selectedMatch === 'TDM') {
+      setTdmTournament(newT);
+      localStorage.setItem('pubg_tournament_tdm_v1', JSON.stringify(newT));
+    } else {
+      setErangelTournament(newT);
+      localStorage.setItem('pubg_tournament_erangel_v1', JSON.stringify(newT));
+      saveStoredTournament(newT);
+    }
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pubg_tournament_erangel_v1', JSON.stringify(erangelTournament));
+      localStorage.setItem('pubg_tournament_livik_v1', JSON.stringify(livikTournament));
+      localStorage.setItem('pubg_tournament_tdm_v1', JSON.stringify(tdmTournament));
+      localStorage.setItem('pubg_arena_freefire_tournament_v1', JSON.stringify(freeFireTournament));
+    } catch {}
+  }, [erangelTournament, livikTournament, tdmTournament, freeFireTournament]);
+
   const [userBalance, setUserBalance] = useState<number>(() => loadUserBalance());
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>(defaultPaymentAccounts);
 
@@ -425,35 +506,124 @@ export default function App() {
   // Primary live sync with Firebase RTDB (Immediate, ultra-fast, works across all domains)
   const fetchTournamentData = useCallback(async () => {
     try {
-      // 1. Direct authoritative live sync with Firebase Realtime Database
-      const [fbTRes, fbRRes] = await Promise.all([
+      // 1. Direct authoritative live sync with Firebase Realtime Database for each match
+      const [fbTRes, fbErangelRes, fbLivikRes, fbTdmRes, fbFfRes] = await Promise.all([
         fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json'),
-        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/PUBG001.json')
+        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/PUBG001.json'),
+        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/LIVIK.json'),
+        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/TDM.json'),
+        fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/FREE_FIRE.json')
       ]);
       let fbTData: any = null;
-      let fbRData: any = null;
+      let fbErangelData: any = null;
+      let fbLivikData: any = null;
+      let fbTdmData: any = null;
+      let fbFfData: any = null;
+
       if (fbTRes.ok) {
-        const tText = await fbTRes.text();
-        if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) {
-          try { fbTData = JSON.parse(tText); } catch {}
+        const text = await fbTRes.text();
+        if (text && text.trim().startsWith('{')) {
+          try { fbTData = JSON.parse(text); } catch {}
         }
       }
-      if (fbRRes.ok) {
-        const rText = await fbRRes.text();
-        if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) {
-          try { fbRData = JSON.parse(rText); } catch {}
+      if (fbErangelRes.ok) {
+        const text = await fbErangelRes.text();
+        if (text && text.trim().startsWith('{')) {
+          try { fbErangelData = JSON.parse(text); } catch {}
+        }
+      }
+      if (fbLivikRes.ok) {
+        const text = await fbLivikRes.text();
+        if (text && text.trim().startsWith('{')) {
+          try { fbLivikData = JSON.parse(text); } catch {}
+        }
+      }
+      if (fbTdmRes.ok) {
+        const text = await fbTdmRes.text();
+        if (text && text.trim().startsWith('{')) {
+          try { fbTdmData = JSON.parse(text); } catch {}
+        }
+      }
+      if (fbFfRes.ok) {
+        const text = await fbFfRes.text();
+        if (text && text.trim().startsWith('{')) {
+          try { fbFfData = JSON.parse(text); } catch {}
         }
       }
 
-      if (fbTData || fbRData) {
-        setTournament(prev => {
-          const merged = mergeTournamentWithFirebase(prev, fbTData, fbRData);
+      if (fbTData || fbErangelData) {
+        setErangelTournament(prev => {
+          const merged = mergeTournamentWithFirebase(prev, fbTData, fbErangelData);
+          localStorage.setItem('pubg_tournament_erangel_v1', JSON.stringify(merged));
           saveStoredTournament(merged);
           return merged;
         });
       }
 
-      // 2. Safe check against local edge route if available (non-blocking)
+      if (fbLivikData) {
+        setLivikTournament(prev => {
+          const merged = mergeTournamentWithFirebase(prev, null, fbLivikData);
+          localStorage.setItem('pubg_tournament_livik_v1', JSON.stringify(merged));
+          return merged;
+        });
+      }
+
+      if (fbTdmData) {
+        setTdmTournament(prev => {
+          const merged = mergeTournamentWithFirebase(prev, null, fbTdmData);
+          localStorage.setItem('pubg_tournament_tdm_v1', JSON.stringify(merged));
+          return merged;
+        });
+      }
+
+      if (fbFfData) {
+        setFreeFireTournament(prev => {
+          const merged = mergeTournamentWithFirebase(prev, null, fbFfData);
+          localStorage.setItem('pubg_arena_freefire_tournament_v1', JSON.stringify(merged));
+          return merged;
+        });
+      }
+
+      // 2. Sync all match schedules from Firebase RTDB (/tournaments.json)
+      try {
+        const matchesRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournaments.json');
+        if (matchesRes.ok) {
+          const mText = await matchesRes.text();
+          if (mText && mText.trim() !== 'null' && mText.trim().startsWith('{')) {
+            const mData = JSON.parse(mText);
+            if (mData.ERANGEL) {
+              setErangelTournament(prev => {
+                const u = { ...prev, ...mData.ERANGEL };
+                localStorage.setItem('pubg_tournament_erangel_v1', JSON.stringify(u));
+                return u;
+              });
+            }
+            if (mData.LIVIK) {
+              setLivikTournament(prev => {
+                const u = { ...prev, ...mData.LIVIK };
+                localStorage.setItem('pubg_tournament_livik_v1', JSON.stringify(u));
+                return u;
+              });
+            }
+            if (mData.TDM) {
+              setTdmTournament(prev => {
+                const u = { ...prev, ...mData.TDM };
+                localStorage.setItem('pubg_tournament_tdm_v1', JSON.stringify(u));
+                return u;
+              });
+            }
+            if (mData.FREE_FIRE) {
+              setFreeFireTournament(prev => {
+                const u = { ...prev, ...mData.FREE_FIRE };
+                localStorage.setItem('pubg_arena_freefire_tournament_v1', JSON.stringify(u));
+                return u;
+              });
+            }
+          }
+        }
+      } catch {}
+
+      // 3. Safe check against local edge route if available (non-blocking)
       fetch('/api/tournament')
         .then(res => res.text())
         .then(text => {
@@ -467,6 +637,48 @@ export default function App() {
         .catch(() => {});
     } catch (err) {
       console.warn('Firebase sync warning:', err);
+    }
+  }, []);
+
+  const handleUpdateMatchSchedule = useCallback((
+    matchId: 'ERANGEL' | 'LIVIK' | 'TDM' | 'FREE_FIRE',
+    schedule: {
+      matchDate: string;
+      matchTime: string;
+      matchStartTime: number;
+      roomOpenTime: number;
+      matchEndTime: number;
+      roomId: string;
+      roomPassword: string;
+      youtubeUrl: string;
+      manualStatus: TournamentStatus | 'AUTO';
+    }
+  ) => {
+    if (matchId === 'ERANGEL') {
+      setErangelTournament(prev => {
+        const updated = { ...prev, ...schedule };
+        localStorage.setItem('pubg_tournament_erangel_v1', JSON.stringify(updated));
+        saveStoredTournament(updated);
+        return updated;
+      });
+    } else if (matchId === 'LIVIK') {
+      setLivikTournament(prev => {
+        const updated = { ...prev, ...schedule };
+        localStorage.setItem('pubg_tournament_livik_v1', JSON.stringify(updated));
+        return updated;
+      });
+    } else if (matchId === 'TDM') {
+      setTdmTournament(prev => {
+        const updated = { ...prev, ...schedule };
+        localStorage.setItem('pubg_tournament_tdm_v1', JSON.stringify(updated));
+        return updated;
+      });
+    } else if (matchId === 'FREE_FIRE') {
+      setFreeFireTournament(prev => {
+        const updated = { ...prev, ...schedule };
+        localStorage.setItem('pubg_arena_freefire_tournament_v1', JSON.stringify(updated));
+        return updated;
+      });
     }
   }, []);
 
@@ -512,6 +724,22 @@ export default function App() {
       return;
     }
 
+    // Strict duplicate check for Team Death Match (TDM):
+    // "Team death match ki entry free rakho eik person sirf eik bar join hoske matlab Same uid se again join na how"
+    if (selectedMatch === 'TDM') {
+      const isAlreadyRegistered = tdmTournament.teams.some(t =>
+        t.seats?.some(s =>
+          (s.status === 'APPROVED' || s.status === 'RESERVED_PENDING') &&
+          s.playerUid &&
+          s.playerUid.trim().toLowerCase() === savedPubgId.trim().toLowerCase()
+        )
+      );
+      if (isAlreadyRegistered) {
+        alert(`⚠️ Duplicate Entry Blocked:\n\nYeh PUBG UID (${savedPubgId}) pehle se hi Team Death Match me registered hai!\n\nRules: Team Death Match me eik person / UID sirf eik hi baar join ho sakta hai.`);
+        return;
+      }
+    }
+
     setBookingTeam(teamNumber);
     setBookingSeat(seatNumber);
     openWithHistory(() => setIsBookingOpen(true));
@@ -539,6 +767,21 @@ export default function App() {
       setPinModalReason('Please set your PUBG ID, Name & 4-Digit PIN to quickly reserve your seat.');
       openWithHistory(() => setIsPinModalOpen(true));
       return;
+    }
+
+    // Strict duplicate check for Team Death Match (TDM)
+    if (selectedMatch === 'TDM' && savedPubgId) {
+      const isAlreadyRegistered = tdmTournament.teams.some(t =>
+        t.seats?.some(s =>
+          (s.status === 'APPROVED' || s.status === 'RESERVED_PENDING') &&
+          s.playerUid &&
+          s.playerUid.trim().toLowerCase() === savedPubgId.trim().toLowerCase()
+        )
+      );
+      if (isAlreadyRegistered) {
+        alert(`⚠️ Duplicate Entry Blocked:\n\nYeh PUBG UID (${savedPubgId}) pehle se hi Team Death Match me registered hai!\n\nRules: Team Death Match me eik person / UID sirf eik hi baar join ho sakta hai.`);
+        return;
+      }
     }
 
     handleJoinSeat(targetTeam, targetSeat);
@@ -583,11 +826,33 @@ export default function App() {
     seatNumbers: number[],
     players: { pubgId: string; name: string; avatarUrl?: string }[]
   ) => {
-    const costDiamonds = seatNumbers.length * 150;
+    const isFreeFireMatch = (activeGame === 'FREE_FIRE' || selectedMatch === 'FREE_FIRE');
+    const isLivikMatch = selectedMatch === 'LIVIK';
+    const isTdmMatch = selectedMatch === 'TDM';
+    const matchResNode = isFreeFireMatch ? 'FREE_FIRE' : (isLivikMatch ? 'LIVIK' : (isTdmMatch ? 'TDM' : 'PUBG001'));
+    const teamMaxSeats = isLivikMatch ? 2 : 4;
+    const validSlots = isLivikMatch ? ['1', '2'] : ['1', '2', '3', '4'];
+    const costDiamonds = isTdmMatch ? 0 : (seatNumbers.length * 150);
     const activeUid = (savedPubgId || players[0]?.pubgId || '').trim();
 
-    // 1. Strict Client-Side Balance Guard
-    if (userBalance < costDiamonds) {
+    // Strict single-entry & duplicate check for Team Death Match (TDM):
+    // "Team death match ki entry free rakho eik person sirf eik bar join hoske matlab Same uid se again join na how"
+    if (isTdmMatch) {
+      const isAlreadyRegistered = tournament.teams.some(t =>
+        t.seats.some(s =>
+          (s.status === 'APPROVED' || s.status === 'RESERVED_PENDING') &&
+          s.playerUid &&
+          s.playerUid.trim().toLowerCase() === activeUid.toLowerCase()
+        )
+      );
+      if (isAlreadyRegistered) {
+        alert(`⚠️ Duplicate Entry Blocked:\n\nYeh PUBG UID (${activeUid}) pehle se hi Team Death Match me registered hai!\n\nRules: Team Death Match me eik person / UID sirf eik hi baar join ho sakta hai.`);
+        return;
+      }
+    }
+
+    // 1. Strict Client-Side Balance Guard (only if match is paid)
+    if (costDiamonds > 0 && userBalance < costDiamonds) {
       alert(`⚠️ Insufficient Balance!\n\nYou have ${userBalance} 💎, but this booking costs ${costDiamonds} 💎 (${seatNumbers.length} seat(s) × 150 💎).\nShortage: ${costDiamonds - userBalance} 💎.\n\nPlease recharge your account to continue.`);
       handleOpenDeposit(activeUid);
       return;
@@ -595,10 +860,10 @@ export default function App() {
 
     // 2. Prepare seats for batch reservation in SeatReservations structure
     const seatsToReserve = seatNumbers.map((sNum, idx) => {
-      const player = players[idx] || { pubgId: '512999000', name: 'Player' };
+      const player = players[idx] || players[0] || { pubgId: '512999000', name: 'Player' };
       const assignedName = (idx === 0 && savedPlayerName)
         ? savedPlayerName
-        : (player.name.trim() || `Player_${player.pubgId.slice(-4)}`);
+        : (player.name?.trim() || `Player_${player.pubgId.slice(-4)}`);
       const assignedUid = (idx === 0 && savedPubgId)
         ? savedPubgId
         : player.pubgId.trim();
@@ -652,50 +917,55 @@ export default function App() {
 
       // 2. Direct Authoritative Firebase RTDB Write (Ensures 100% success on Cloudflare Pages & domain squardwar.site)
       if (!serverConfirmed) {
-        // A. Verify and deduct balance in Firebase RTDB
-        let fbUser: any = null;
-        try {
-          const fbUserRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(activeUid)}.json`);
-          if (fbUserRes.ok) {
-            const fbUserText = await fbUserRes.text();
-            if (fbUserText && fbUserText.trim() !== 'null' && fbUserText.trim().startsWith('{')) {
-              fbUser = JSON.parse(fbUserText);
+        // A. Verify and deduct balance in Firebase RTDB (only if paid match)
+        if (costDiamonds > 0) {
+          let fbUser: any = null;
+          try {
+            const fbUserRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(activeUid)}.json`);
+            if (fbUserRes.ok) {
+              const fbUserText = await fbUserRes.text();
+              if (fbUserText && fbUserText.trim() !== 'null' && fbUserText.trim().startsWith('{')) {
+                fbUser = JSON.parse(fbUserText);
+              }
             }
-          }
-        } catch {}
+          } catch {}
 
-        const fbBal = (fbUser && typeof fbUser.balance === 'number') ? fbUser.balance : userBalance;
-        if (fbBal < costDiamonds) {
-          alert(`⚠️ Insufficient Balance in Firebase!\n\nYou have ${fbBal} 💎, but this booking costs ${costDiamonds} 💎.\nPlease recharge your account to continue.`);
-          setUserBalance(fbBal);
-          saveUserBalance(fbBal);
-          handleOpenDeposit(activeUid);
-          return;
+          const fbBal = (fbUser && typeof fbUser.balance === 'number') ? fbUser.balance : userBalance;
+          if (fbBal < costDiamonds) {
+            alert(`⚠️ Insufficient Balance in Firebase!\n\nYou have ${fbBal} 💎, but this booking costs ${costDiamonds} 💎.\nPlease recharge your account to continue.`);
+            setUserBalance(fbBal);
+            saveUserBalance(fbBal);
+            handleOpenDeposit(activeUid);
+            return;
+          }
+
+          const newBal = Math.max(0, fbBal - costDiamonds);
+          confirmedBalance = newBal;
+
+          // Save updated user balance to Firebase RTDB
+          const updatedUserObj = fbUser ? { ...fbUser, balance: newBal } : {
+            uid: activeUid,
+            pubgUid: activeUid,
+            playerName: savedPlayerName || players[0]?.name || 'Player',
+            balance: newBal,
+            updatedAt: Date.now()
+          };
+
+          await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(activeUid)}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedUserObj)
+          });
+        } else {
+          // Free Entry (Team Death Match)
+          confirmedBalance = userBalance;
         }
 
-        const newBal = Math.max(0, fbBal - costDiamonds);
-        confirmedBalance = newBal;
-
-        // Save updated user balance to Firebase RTDB
-        const updatedUserObj = fbUser ? { ...fbUser, balance: newBal } : {
-          uid: activeUid,
-          pubgUid: activeUid,
-          playerName: savedPlayerName || players[0]?.name || 'Player',
-          balance: newBal,
-          updatedAt: Date.now()
-        };
-
-        await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(activeUid)}.json`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedUserObj)
-        });
-
-        // B. Fetch existing team reservation from Firebase RTDB
+        // B. Fetch existing team reservation from Firebase RTDB for this specific match
         const teamKey = `TEAM${teamNumber}`;
         let teamData: any = null;
         try {
-          const teamRes = await fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001/${teamKey}.json`);
+          const teamRes = await fetch(`${FIREBASE_DB_URL}/SeatReservations/${matchResNode}/${teamKey}.json`);
           if (teamRes.ok) {
             const teamText = await teamRes.text();
             if (teamText && teamText.trim() !== 'null' && teamText.trim().startsWith('{')) {
@@ -708,19 +978,19 @@ export default function App() {
           teamData = {
             teamId: teamKey,
             captainUid: null,
-            totalSeats: 4,
+            totalSeats: teamMaxSeats,
             reservedSeats: 0,
-            members: { '1': null, '2': null, '3': null, '4': null }
+            members: isLivikMatch ? { '1': null, '2': null } : { '1': null, '2': null, '3': null, '4': null }
           };
         }
         if (!teamData.members) {
-          teamData.members = { '1': null, '2': null, '3': null, '4': null };
+          teamData.members = isLivikMatch ? { '1': null, '2': null } : { '1': null, '2': null, '3': null, '4': null };
         }
 
         // Apply seats
         for (const s of seatsToReserve) {
           const sNum = Number(s.seatNumber);
-          if (sNum < 1 || sNum > 4) continue;
+          if (sNum < 1 || sNum > teamMaxSeats) continue;
           const slotKey = String(sNum);
           const isFirstPlayer = sNum === 1;
 
@@ -734,7 +1004,7 @@ export default function App() {
         }
 
         let occupied = 0;
-        for (const k of ['1', '2', '3', '4']) {
+        for (const k of validSlots) {
           if (teamData.members[k] !== null && teamData.members[k] !== undefined) occupied++;
         }
         teamData.reservedSeats = occupied;
@@ -742,21 +1012,30 @@ export default function App() {
           teamData.captainUid = teamData.members['1'].uid;
         }
 
-        // Write team reservation directly to Firebase RTDB
-        await fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001/${teamKey}.json`, {
+        // Write team reservation directly to Firebase RTDB for this match
+        await fetch(`${FIREBASE_DB_URL}/SeatReservations/${matchResNode}/${teamKey}.json`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(teamData)
         });
 
+        // Also update PUBG001 if this was Erangel for backwards compatibility
+        if (!isFreeFireMatch && !isLivikMatch && !isTdmMatch) {
+          fetch(`${FIREBASE_DB_URL}/SeatReservations/PUBG001/${teamKey}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(teamData)
+          }).catch(() => {});
+        }
+
         // C. Record receipt in Firebase RTDB /bookings
-        const bookingReceiptId = `BKG_PUBG001_T${teamNumber}_${Date.now()}`;
+        const bookingReceiptId = `BKG_${matchResNode}_T${teamNumber}_${Date.now()}`;
         await fetch(`${FIREBASE_DB_URL}/bookings/${bookingReceiptId}.json`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: bookingReceiptId,
-            tournamentId: 'PUBG001',
+            tournamentId: matchResNode,
             teamNumber,
             seats: seatsToReserve,
             bookerUid: activeUid,
@@ -783,10 +1062,10 @@ export default function App() {
             const isFirstSeat = seat.seatNumber === 1;
 
             if (seatIdx !== -1) {
-              const player = players[seatIdx] || { pubgId: '512999000', name: 'Player' };
+              const player = players[seatIdx] || players[0] || { pubgId: '512999000', name: 'Player' };
               const assignedName = (seatIdx === 0 && savedPlayerName)
                 ? savedPlayerName
-                : (player.name.trim() || `Player_${player.pubgId.slice(-4)}`);
+                : (player.name?.trim() || `Player_${player.pubgId.slice(-4)}`);
               const assignedUid = (seatIdx === 0 && savedPubgId)
                 ? savedPubgId
                 : player.pubgId.trim();
@@ -823,15 +1102,17 @@ export default function App() {
       };
 
       setTournament(updatedTournament);
-      saveStoredTournament(updatedTournament);
+      if (!isFreeFireMatch && !isLivikMatch && !isTdmMatch) {
+        saveStoredTournament(updatedTournament);
+      }
 
       // Show success modal
       const bookingDetails = {
-        id: `PUBG-BKG-${Date.now().toString().slice(-6)}`,
+        id: isTdmMatch ? `TDM-BKG-${Date.now().toString().slice(-6)}` : `PUBG-BKG-${Date.now().toString().slice(-6)}`,
         teamNumber,
         seatNumbers,
-        amountPkr: costDiamonds,
-        transactionRef: `DIAMOND-DEDUCTION-${costDiamonds}💎`,
+        amountPkr: isTdmMatch ? 0 : costDiamonds,
+        transactionRef: isTdmMatch ? 'FREE ENTRY (0 💎)' : `DIAMOND-DEDUCTION-${costDiamonds}💎`,
         status: 'APPROVED',
         remainingBalance: confirmedBalance
       };
@@ -894,7 +1175,10 @@ export default function App() {
         userBalance={userBalance}
         savedPubgId={savedPubgId}
         savedPlayerName={savedPlayerName}
-        onSelectGame={(g) => setActiveGame(g)}
+        onSelectGame={(g) => {
+          setActiveGame(g);
+          setSelectedMatch(null);
+        }}
         onOpenMenu={() => openWithHistory(() => setIsDrawerOpen(true))}
         onOpenDeposit={handleOpenDeposit}
         onOpenAdmin={() => openWithHistory(() => setIsAdminOpen(true))}
@@ -914,62 +1198,94 @@ export default function App() {
 
       {/* 2. MAIN VIEWPORT */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
-        {/* Free Fire Notice */}
-        {activeGame === 'FREE_FIRE' && (
-          <div className="mb-4 p-3 rounded-xl bg-orange-950/40 border border-orange-500/50 flex items-center justify-between text-xs text-orange-200">
-            <span>Free Fire Clash Squad Tournament will open registration after PUBG Mobile Squad round concludes.</span>
-            <button
-              onClick={() => setActiveGame('PUBG')}
-              className="font-bold underline text-amber-400 hover:text-white"
-            >
-              Switch to PUBG
-            </button>
-          </div>
-        )}
-
-        {/* HERO BANNER WITH TOURNAMENT POSTER */}
-        <HeroBanner
-          tournament={tournament}
-          onQuickJoin={handleQuickJoin}
-        />
-
-        {/* ROOM CREDENTIALS / TIMELINE LIFECYCLE BAR */}
-        <RoomAccessAlert
-          tournament={tournament}
-          onOpenResults={() => openWithHistory(() => setIsResultsOpen(true))}
-        />
-
-        {/* 3 ICON BUTTONS IN EASYPAISA STYLE (REWARD · NOTICES · REVIEWS) */}
+        {/* 3 ICON BUTTONS IN EASYPAISA STYLE:
+            PUBG: REWARD · NOTICES · REVIEWS
+            FREE FIRE: REWARD · CASHOUT · REVIEWS */}
         <SeatCounters
+          activeGame={activeGame}
           onOpenReward={() => handleOpenFeature('REWARD')}
+          onOpenCashout={() => handleOpenFeature('CASHOUT')}
           onOpenNotices={() => openWithHistory(() => setIsNoticesModalOpen(true))}
           onOpenReviews={() => handleOpenFeature('REVIEWS')}
         />
 
-        {/* 25 SQUADS & SEAT RESERVATION SECTION */}
-        <div className="mt-4 mb-8">
-          {/* Header row with Right-Side Reserved Seats Label */}
-          <div className="flex items-center justify-end gap-2 mb-3 px-1">
-            {/* RIGHT SIDE RESERVED COUNT LABEL */}
-            <div className="flex items-center gap-2 bg-gradient-to-r from-slate-900/90 to-slate-800/90 border border-slate-700/80 rounded-full px-3.5 py-1 shadow-md">
-              <span className="text-[11px] font-medium text-slate-400">Seats Reserved:</span>
-              <span className="text-xs font-black font-heading tracking-wide text-amber-400">
-                {reservedCount} <span className="text-slate-500 font-normal">/ {totalSeats}</span>
-              </span>
+        {/* =========================================================================
+            SCREEN 1: MATCH SELECTION HUB (Images + Full Join Buttons)
+            Shown by default when no match is opened yet
+           ========================================================================= */}
+        {!selectedMatch ? (
+          <MatchListSection
+            activeGame={activeGame}
+            erangelTournament={erangelTournament}
+            livikTournament={livikTournament}
+            tdmTournament={tdmTournament}
+            freeFireTournament={freeFireTournament}
+            onSelectPubgMatch={(matchId) => {
+              setSelectedMatch(matchId);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSelectFreeFire={() => {
+              setSelectedMatch('FREE_FIRE');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        ) : (
+          /* =========================================================================
+              SCREEN 2: DEDICATED SEAT RESERVATION VIEW FOR SELECTED MATCH
+             ========================================================================= */
+          <div className="space-y-4 animate-in fade-in-50 duration-200">
+            {/* Top Navigation: Back to Matches Button */}
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setSelectedMatch(null)}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 text-amber-300 font-heading font-black text-xs uppercase tracking-wider border border-amber-500/50 transition-all cursor-pointer shadow active:scale-95"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Matches</span>
+              </button>
+            </div>
+
+            {/* HERO BANNER WITH SELECTED MATCH POSTER & COUNTDOWN */}
+            <HeroBanner
+              tournament={tournament}
+              activeGame={activeGame}
+              customBannerImage={
+                selectedMatch === 'ERANGEL' 
+                  ? MATCH_IMAGES.ERANGEL 
+                  : selectedMatch === 'LIVIK' 
+                    ? MATCH_IMAGES.LIVIK 
+                    : selectedMatch === 'TDM' 
+                      ? MATCH_IMAGES.TDM 
+                      : (activeGame === 'FREE_FIRE' ? MATCH_IMAGES.FREE_FIRE : undefined)
+              }
+              onQuickJoin={handleQuickJoin}
+            />
+
+            {/* ROOM CREDENTIALS / TIMELINE LIFECYCLE BAR */}
+            <RoomAccessAlert
+              tournament={tournament}
+              onOpenResults={() => openWithHistory(() => setIsResultsOpen(true))}
+            />
+
+            {/* SEAT RESERVATION SECTION FOR ACTIVE MATCH */}
+            <div className="mt-4 mb-8">
+
+              {/* Grid of Teams */}
+              <div className={`grid ${selectedMatch === 'TDM' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-4`}>
+                {tournament.teams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    onJoinSeat={handleJoinSeat}
+                    activeGame={activeGame}
+                    isTdm={selectedMatch === 'TDM'}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-
-          {/* 2-Column Grid of All 25 Teams */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {tournament.teams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                onJoinSeat={handleJoinSeat}
-              />
-            ))}
-          </div>
-        </div>
+        )}
       </main>
 
       {/* 4. MODALS */}
@@ -984,6 +1300,8 @@ export default function App() {
         userBalance={userBalance}
         savedPubgId={savedPubgId}
         savedPlayerName={savedPlayerName}
+        activeGame={activeGame}
+        isTdm={selectedMatch === 'TDM'}
         onConfirmBooking={handleConfirmDiamondBooking}
         onOpenRecharge={handleOpenDeposit}
       />
@@ -1006,8 +1324,14 @@ export default function App() {
         onLogin={handleAdminLogin}
         onLogout={handleAdminLogout}
         tournament={tournament}
+        erangelTournament={erangelTournament}
+        livikTournament={livikTournament}
+        tdmTournament={tdmTournament}
+        freeFireTournament={freeFireTournament}
+        initialMatch={selectedMatch || (activeGame === 'FREE_FIRE' ? 'FREE_FIRE' : 'ERANGEL')}
         onRefreshData={fetchTournamentData}
         onNoticeUpdated={fetchActiveNotice}
+        onUpdateMatchSchedule={handleUpdateMatchSchedule}
       />
 
       {/* Results & Leaderboard Modal */}
@@ -1044,6 +1368,12 @@ export default function App() {
         userBalance={userBalance}
         onRefreshUserBalance={() => refreshUserBalance()}
         onOpenDeposit={handleOpenDeposit}
+        totalReservedSeats={reservedCount}
+        activeGame={activeGame}
+        erangelTournament={erangelTournament}
+        livikTournament={livikTournament}
+        tdmTournament={tdmTournament}
+        freeFireTournament={freeFireTournament}
       />
 
       {/* PIN Authentication & Profile Modal (Prompts for PUBG ID, Name & 4-Digit PIN when required) */}

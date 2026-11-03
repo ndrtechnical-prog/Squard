@@ -1,15 +1,17 @@
 import React from 'react';
-import { Users, Plus, CheckCircle2, Clock, Crown } from 'lucide-react';
-import { Team, Seat } from '../types/tournament';
+import { Users, Plus, CheckCircle2, Clock, Crown, Lock } from 'lucide-react';
+import { Team, Seat, GameType } from '../types/tournament';
 
 interface TeamCardProps {
   team: Team;
   onJoinSeat: (teamNumber: number, seatNumber: number) => void;
+  activeGame?: GameType;
+  isTdm?: boolean;
 }
 
 const DEFAULT_AVATAR = '/images/avatars/pubg_avatar_golden_1792656009701.jpg';
 
-export const TeamCard: React.FC<TeamCardProps> = ({ team, onJoinSeat }) => {
+export const TeamCard: React.FC<TeamCardProps> = ({ team, onJoinSeat, activeGame, isTdm }) => {
   const approvedCount = team.seats.filter(s => s.status === 'APPROVED').length;
   const pendingCount = team.seats.filter(s => s.status === 'RESERVED_PENDING').length;
   const occupiedCount = approvedCount + pendingCount;
@@ -37,12 +39,12 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, onJoinSeat }) => {
         </div>
       </div>
 
-      {/* 4 Seats in a Row with Fetched Player Profile Pictures */}
-      <div className="grid grid-cols-4 gap-2 sm:gap-3">
+      {/* Seats Row with Dynamic Duo (2) or Squad (4) Layout */}
+      <div className={`grid ${totalSeats === 2 ? 'grid-cols-2 max-w-xs mx-auto' : 'grid-cols-4'} gap-2 sm:gap-3`}>
         {team.seats.map((seat: Seat) => {
           const isApproved = seat.status === 'APPROVED';
           const isPending = seat.status === 'RESERVED_PENDING';
-          const isCaptain = seat.seatNumber === 1 || seat.isCaptain || seat.role === 'captain';
+          const isCaptain = !isTdm && (seat.seatNumber === 1 || seat.isCaptain || seat.role === 'captain');
 
           if (isApproved) {
             const avatarSrc = seat.avatarUrl || DEFAULT_AVATAR;
@@ -162,19 +164,47 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, onJoinSeat }) => {
             );
           }
 
-          // Empty Seat
+          // Locked squad member slots (in Squad/Duo matches, slots 2+ are locked; captain slot 1 books the entire box)
+          // In Team Death Match (TDM), every slot 1-4 is unlocked and can be joined individually for Free!
+          const isSquadSlotLocked = isTdm ? false : (seat.seatNumber > 1);
+          if (isSquadSlotLocked) {
+            return (
+              <div
+                key={seat.id}
+                className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/70 border border-slate-900 text-slate-600 aspect-square relative opacity-50 cursor-not-allowed select-none"
+                title={`Slot ${seat.seatNumber} is locked. Captain slot (👑 Slot 1) books the entire 4-player squad box (600 💎).`}
+              >
+                <div className="w-8 h-8 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-600 mb-1">
+                  <Lock className="w-4 h-4 text-slate-600" />
+                </div>
+                <span className="text-[10px] font-mono text-slate-600 uppercase">
+                  Locked
+                </span>
+              </div>
+            );
+          }
+
+          // Empty Seat (In TDM: free individual slot; In Erangel/Livik/FF: books entire box)
           return (
             <button
               key={seat.id}
               onClick={() => onJoinSeat(team.teamNumber, seat.seatNumber)}
-              className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 aspect-square group shadow-inner transition-all duration-200 cursor-pointer seat-available-hover relative"
-              title={`Click to book Seat ${seat.seatNumber} in Team ${team.teamNumber} ${isCaptain ? '(Captain Slot 👑)' : ''} (150 💎)`}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl bg-slate-900/60 border ${
+                isTdm 
+                  ? 'border-emerald-500/40 hover:border-emerald-400 group hover:bg-emerald-950/20' 
+                  : 'border-slate-800 hover:border-cyan-500/50 group'
+              } text-slate-400 aspect-square shadow-inner transition-all duration-200 cursor-pointer seat-available-hover relative`}
+              title={
+                isTdm
+                  ? `Click to join ${team.name} Slot ${seat.seatNumber} (Free Entry)`
+                  : `Click to book Team ${team.teamNumber} ${totalSeats === 2 ? 'Duo Box (300 💎)' : 'Squad Box (600 💎)'}`
+              }
             >
-              {/* Golden Crown on Top Right Corner for Captain Seat */}
-              {isCaptain && (
+              {/* Golden Crown on Top Right Corner only for Duo/Squad Captain Seat */}
+              {!isTdm && (
                 <div
                   className="absolute -top-1 -right-1 z-20 w-4 h-4 rounded-full bg-amber-500/25 border border-amber-400/60 flex items-center justify-center text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.4)]"
-                  title="Squad Captain Slot 👑"
+                  title="Captain Slot 👑"
                 >
                   <Crown className="w-2.5 h-2.5 fill-amber-400/80 stroke-amber-300" />
                 </div>
@@ -183,11 +213,21 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, onJoinSeat }) => {
               {/* Light sweep reflection on hover */}
               <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/0 via-cyan-400/5 to-cyan-400/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-xl" />
 
-              <div className="w-8 h-8 rounded-lg bg-slate-800/80 group-hover:bg-cyan-500/25 border border-transparent group-hover:border-cyan-400/60 flex items-center justify-center text-slate-300 group-hover:text-cyan-200 transition-all duration-200 mb-1 group-hover:scale-110 shadow-sm">
-                <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300 ease-out text-slate-300 group-hover:text-cyan-300" />
+              <div className={`w-8 h-8 rounded-lg ${
+                isTdm
+                  ? 'bg-emerald-950/60 group-hover:bg-emerald-500/25 border border-emerald-500/30 group-hover:border-emerald-400/60 text-emerald-400 group-hover:text-emerald-200'
+                  : 'bg-slate-800/80 group-hover:bg-cyan-500/25 border border-transparent group-hover:border-cyan-400/60 text-slate-300 group-hover:text-cyan-200'
+              } flex items-center justify-center transition-all duration-200 mb-1 group-hover:scale-110 shadow-sm`}>
+                <Plus className={`w-5 h-5 group-hover:rotate-90 transition-transform duration-300 ease-out ${
+                  isTdm ? 'text-emerald-400 group-hover:text-emerald-300' : 'text-slate-300 group-hover:text-cyan-300'
+                }`} />
               </div>
-              <span className="text-[11px] font-bold text-slate-300 group-hover:text-cyan-300 transition-colors uppercase tracking-wider">
-                {isCaptain ? '👑 Cpt' : 'Join'}
+              <span className={`text-[11px] font-bold ${
+                isTdm 
+                  ? 'text-emerald-400 group-hover:text-emerald-300' 
+                  : 'text-slate-300 group-hover:text-cyan-300'
+              } transition-colors uppercase tracking-wider`}>
+                {isTdm ? '+ Free' : (totalSeats === 2 ? '👑 Duo' : '👑 Squad')}
               </span>
             </button>
           );
@@ -196,4 +236,3 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, onJoinSeat }) => {
     </div>
   );
 };
-

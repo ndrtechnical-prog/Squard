@@ -27,9 +27,9 @@ import {
   RefreshCw,
   ExternalLink
 } from 'lucide-react';
-import { CashOutMethod, CashOutStatus, CashOutRequest, UserWalletData, RewardSettings } from '../types/tournament';
+import { CashOutMethod, CashOutStatus, CashOutRequest, UserWalletData, RewardSettings, GameType, Tournament } from '../types/tournament';
 
-export type FeatureTab = 'REWARD' | 'TOP_PLAYER' | 'REVIEWS';
+export type FeatureTab = 'REWARD' | 'CASHOUT' | 'REVIEWS';
 
 interface TournamentFeaturesModalProps {
   isOpen: boolean;
@@ -40,6 +40,12 @@ interface TournamentFeaturesModalProps {
   userBalance?: number;
   onRefreshUserBalance?: () => void;
   onOpenDeposit?: () => void;
+  totalReservedSeats?: number;
+  activeGame?: GameType;
+  erangelTournament?: Tournament;
+  livikTournament?: Tournament;
+  tdmTournament?: Tournament;
+  freeFireTournament?: Tournament;
 }
 
 interface ReviewItem {
@@ -99,9 +105,36 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
   savedPlayerName = '',
   userBalance = 0,
   onRefreshUserBalance,
-  onOpenDeposit
+  onOpenDeposit,
+  totalReservedSeats = 0,
+  activeGame = 'PUBG',
+  erangelTournament,
+  livikTournament,
+  tdmTournament,
+  freeFireTournament
 }) => {
   const [activeTab, setActiveTab] = useState<FeatureTab>(initialTab);
+
+  const getReserved = (t?: Tournament): number => {
+    if (!t?.teams) return 0;
+    return t.teams.reduce((acc, team) => {
+      return acc + (team.seats?.filter(s => s.status === 'APPROVED' || s.status === 'RESERVED_PENDING').length || 0);
+    }, 0);
+  };
+
+  // Dedicated independent reservation counts for each tournament
+  const erangelReserved = getReserved(erangelTournament);
+  const livikReserved = getReserved(livikTournament);
+  const tdmReserved = getReserved(tdmTournament);
+  const ffReserved = getReserved(freeFireTournament);
+
+  // User's Exact Reward Rules:
+  // 1 Erangel Reward: Per Kill PKR 100 (separate, not multiplied by seats)
+  // 2 Livik Reward: Chicken Dinner = 100 × total seats reserved in Livik Duo
+  const livikChickenDinner = 100 * livikReserved;
+  // 3 Team Death Match: Winner Team Cash = PKR 1,000, Entry Free
+  // Free Fire Reward: Chicken Dinner = 100 × total seats reserved in Free Fire
+  const ffChickenDinner = 100 * ffReserved;
 
   // Reward settings from backend/Firebase RTDB
   const [rewardSettings, setRewardSettings] = useState<RewardSettings>({
@@ -450,8 +483,8 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                 <span>PUBG ARENA</span>
                 <span className="text-amber-400">·</span>
                 <span className="text-slate-300">
-                  {activeTab === 'REWARD' && 'REWARD & CASHOUT'}
-                  {activeTab === 'TOP_PLAYER' && 'HALL OF FAME'}
+                  {activeTab === 'REWARD' && 'REWARD DETAILS'}
+                  {activeTab === 'CASHOUT' && 'WALLET & CASHOUT'}
                   {activeTab === 'REVIEWS' && 'COMMUNITY REVIEWS'}
                 </span>
               </h1>
@@ -491,13 +524,13 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
           </div>
         )}
 
-        {/* 3 Full-Screen Navigation Tabs (Easypaisa Style Actions) */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-7 p-1.5 rounded-2xl bg-[#091220] border border-slate-800/80 shadow-lg">
+        {/* Navigation Tabs (Easypaisa Style Actions) */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-7 p-1.5 rounded-2xl bg-[#091220] border border-slate-800/80 shadow-lg">
           {/* REWARD Tab Button */}
           <button
             type="button"
             onClick={() => setActiveTab('REWARD')}
-            className={`py-3 sm:py-3.5 px-3 sm:px-6 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black tracking-wider uppercase transition-all cursor-pointer ${
+            className={`py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black tracking-wider uppercase transition-all cursor-pointer ${
               activeTab === 'REWARD'
                 ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -507,25 +540,25 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
             <span>Reward</span>
           </button>
 
-          {/* TOP PLAYER Tab Button */}
+          {/* CASHOUT Tab Button */}
           <button
             type="button"
-            onClick={() => setActiveTab('TOP_PLAYER')}
-            className={`py-3 sm:py-3.5 px-3 sm:px-6 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black tracking-wider uppercase transition-all cursor-pointer ${
-              activeTab === 'TOP_PLAYER'
-                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-lg shadow-amber-500/30 font-extrabold'
+            onClick={() => setActiveTab('CASHOUT')}
+            className={`py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black tracking-wider uppercase transition-all cursor-pointer ${
+              activeTab === 'CASHOUT'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-600 text-black shadow-lg shadow-emerald-500/30 font-extrabold'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
             }`}
           >
-            <Crown className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-            <span>Top Player</span>
+            <Wallet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            <span>Cashout</span>
           </button>
 
           {/* REVIEWS Tab Button */}
           <button
             type="button"
             onClick={() => setActiveTab('REVIEWS')}
-            className={`py-3 sm:py-3.5 px-3 sm:px-6 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black tracking-wider uppercase transition-all cursor-pointer ${
+            className={`py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black tracking-wider uppercase transition-all cursor-pointer ${
               activeTab === 'REVIEWS'
                 ? 'bg-gradient-to-r from-rose-500 to-amber-500 text-white shadow-lg shadow-rose-500/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -537,27 +570,147 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
         </div>
 
         {/* =========================================================================
-            TAB 1: ENHANCED REWARD SECTION (PER KILL REWARD + WALLET + CASH OUT + HISTORY)
+            TAB 1: REWARD SECTION (4 MATCH DETAILS ONLY - CENTERED HEADINGS)
            ========================================================================= */}
         {activeTab === 'REWARD' && (
-          <div className="space-y-4 animate-in fade-in-50 duration-200">
+          <div className="space-y-6 animate-in fade-in-50 duration-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-5xl mx-auto">
+              {/* 1. ERANGEL REWARD */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1c1208] via-[#120a04] to-[#1c1208] border-2 border-amber-500/60 p-5 sm:p-6 shadow-xl hover:border-amber-400 transition-all flex flex-col justify-between">
+                <div>
+                  <div className="text-center pb-3 border-b border-amber-900/40 mb-4">
+                    <h4 className="font-heading font-black text-white text-base sm:text-lg uppercase tracking-wider text-center">
+                      Erangel Reward
+                    </h4>
+                  </div>
 
-            {/* 1. TOP BANNER: PER KILL REWARD (PKR 100 per kill) */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-950/80 via-[#0d1829] to-red-950/80 border-2 border-amber-500/60 p-4 sm:p-5 shadow-[0_0_30px_rgba(245,158,11,0.25)] text-center">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <Flame className="w-5 h-5 text-amber-400 animate-pulse" />
-                <span className="font-heading text-xs sm:text-sm font-black tracking-widest text-amber-300 uppercase">
-                  PER KILL REWARD
-                </span>
-                <Flame className="w-5 h-5 text-amber-400 animate-pulse" />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-black/60 border border-amber-600/40">
+                      <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase font-heading flex items-center gap-1.5">
+                        <Flame className="w-4 h-4 text-amber-400" />
+                        Per Kill
+                      </span>
+                      <span className="font-heading font-black text-base sm:text-lg text-amber-400 font-mono">
+                        PKR 100
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-slate-800">
+                      <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase font-heading">
+                        Entry
+                      </span>
+                      <span className="font-heading font-black text-xs sm:text-sm text-white font-mono">
+                        PKR 600 ( Squard )
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="font-heading text-3xl sm:text-4xl font-black text-white tracking-wider my-1 drop-shadow-[0_2px_10px_rgba(245,158,11,0.4)]">
-                PKR {rewardSettings.perKillReward}{' '}
-                <span className="text-amber-400 text-base sm:text-lg font-bold">per kill</span>
+
+              {/* 2. LIVIK REWARD */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#071626] via-[#040e1a] to-[#071626] border-2 border-cyan-500/60 p-5 sm:p-6 shadow-xl hover:border-cyan-400 transition-all flex flex-col justify-between">
+                <div>
+                  <div className="text-center pb-3 border-b border-cyan-900/40 mb-4">
+                    <h4 className="font-heading font-black text-white text-base sm:text-lg uppercase tracking-wider text-center">
+                      Livik Reward
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-black/60 border border-cyan-600/40">
+                      <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase font-heading flex items-center gap-1.5">
+                        <Crown className="w-4 h-4 text-cyan-400" />
+                        Chicken Dinner
+                      </span>
+                      <span className="font-heading font-black text-base sm:text-lg text-cyan-300 font-mono">
+                        PKR {livikChickenDinner.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-slate-800">
+                      <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase font-heading">
+                        Entry
+                      </span>
+                      <span className="font-heading font-black text-xs sm:text-sm text-white font-mono">
+                        PKR 300 ( Duo )
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. TEAM DEATH MATCH */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#200909] via-[#140505] to-[#200909] border-2 border-red-500/60 p-5 sm:p-6 shadow-xl hover:border-red-400 transition-all flex flex-col justify-between">
+                <div>
+                  <div className="text-center pb-3 border-b border-red-900/40 mb-4">
+                    <h4 className="font-heading font-black text-white text-base sm:text-lg uppercase tracking-wider text-center">
+                      Team Death Match
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-black/60 border border-red-600/40">
+                      <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase font-heading flex items-center gap-1.5">
+                        <Trophy className="w-4 h-4 text-amber-400" />
+                        Winner Team Cash
+                      </span>
+                      <span className="font-heading font-black text-base sm:text-lg text-amber-400 font-mono">
+                        PKR 1,000
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-950/40 border border-emerald-600/40">
+                      <span className="text-xs sm:text-sm font-bold text-emerald-300 uppercase font-heading">
+                        Entry
+                      </span>
+                      <span className="font-heading font-black text-xs sm:text-sm text-emerald-400 font-mono uppercase tracking-wide">
+                        Entry free
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. FREE FIRE REWARD */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#201006] via-[#150a03] to-[#201006] border-2 border-orange-500/60 p-5 sm:p-6 shadow-xl hover:border-orange-400 transition-all flex flex-col justify-between">
+                <div>
+                  <div className="text-center pb-3 border-b border-orange-900/40 mb-4">
+                    <h4 className="font-heading font-black text-white text-base sm:text-lg uppercase tracking-wider text-center">
+                      Free Fire Reward
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-black/60 border border-orange-600/40">
+                      <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase font-heading flex items-center gap-1.5">
+                        <Crown className="w-4 h-4 text-orange-400" />
+                        Chicken Dinner
+                      </span>
+                      <span className="font-heading font-black text-base sm:text-lg text-amber-300 font-mono">
+                        PKR {ffChickenDinner.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-slate-800">
+                      <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase font-heading">
+                        Entry
+                      </span>
+                      <span className="font-heading font-black text-xs sm:text-sm text-white font-mono">
+                        PKR 600 (squard)
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        )}
 
+        {/* =========================================================================
+            TAB: CASHOUT SECTION (WALLET CARD + CASH OUT ACTION + REQUEST HISTORY)
+           ========================================================================= */}
+        {activeTab === 'CASHOUT' && (
+          <div className="space-y-6 animate-in fade-in-50 duration-200">
             {/* 2-Column Responsive Layout on Desktop / Stacked on Mobile */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Left Column (col-span-7): Wallet Card, Cash Out Action, and Payout Guarantee */}
@@ -946,115 +1099,7 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
           </div>
         )}
 
-        {/* =========================================================================
-            TAB 2: TOP PLAYERS (HALL OF FAME)
-           ========================================================================= */}
-        {activeTab === 'TOP_PLAYER' && (
-          <div className="space-y-6 animate-in fade-in-50 duration-200">
-            {/* Header Banner */}
-            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-[#0c1626] border border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shadow-md">
-                  <Crown className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-heading text-lg font-black uppercase text-white tracking-wider">
-                    HALL OF FAME — ASIA REGION
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    Official verified tournament contenders, highest fraggers, and champion clan records.
-                  </p>
-                </div>
-              </div>
-              <div className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
-                ⭐ Season 2026 Rankings
-              </div>
-            </div>
 
-            {/* Expansive 2-Column Grid of Top Players */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Player 1 */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1626] border border-amber-500/50 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center font-black text-amber-400 font-mono text-base">
-                    #1
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm sm:text-base">亗・NADIR_YT・亗</span>
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[10px] font-bold">Ace Dominator ⭐ x5</span>
-                    </div>
-                    <span className="text-xs text-cyan-400 font-mono block mt-0.5">UID: 5675737714 · Clan: PAK ESPORTS</span>
-                  </div>
-                </div>
-                <div className="text-right font-mono text-xs">
-                  <span className="text-white font-bold block text-sm">18 Kills avg</span>
-                  <span className="text-emerald-400 text-xs">48% Win Rate</span>
-                </div>
-              </div>
-
-              {/* Player 2 */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1626] border border-slate-700 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-slate-800 border border-slate-600 flex items-center justify-center font-black text-slate-300 font-mono text-base">
-                    #2
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm sm:text-base">BakkarGamer</span>
-                      <span className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 text-[10px] font-bold">Conqueror</span>
-                    </div>
-                    <span className="text-xs text-cyan-400 font-mono block mt-0.5">UID: 512948104 · Clan: PUNJAB LIONS</span>
-                  </div>
-                </div>
-                <div className="text-right font-mono text-xs">
-                  <span className="text-white font-bold block text-sm">14 Kills avg</span>
-                  <span className="text-emerald-400 text-xs">35% Win Rate</span>
-                </div>
-              </div>
-
-              {/* Player 3 */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1626] border border-amber-800/50 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-amber-950/60 border border-amber-800/60 flex items-center justify-center font-black text-amber-500 font-mono text-base">
-                    #3
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm sm:text-base">Aligamer2</span>
-                      <span className="px-2 py-0.5 rounded-md bg-amber-800/20 text-amber-400 text-[10px] font-bold">Ace Master</span>
-                    </div>
-                    <span className="text-xs text-cyan-400 font-mono block mt-0.5">UID: 520485201 · Clan: SINDH SNIPERS</span>
-                  </div>
-                </div>
-                <div className="text-right font-mono text-xs">
-                  <span className="text-white font-bold block text-sm">11 Kills avg</span>
-                  <span className="text-emerald-400 text-xs">31% Win Rate</span>
-                </div>
-              </div>
-
-              {/* Player 4 */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1626] border border-slate-800 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-black text-slate-400 font-mono text-base">
-                    #4
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm sm:text-base">kingofpubg</span>
-                      <span className="px-2 py-0.5 rounded-md bg-slate-700/30 text-slate-300 text-[10px] font-bold">Ace</span>
-                    </div>
-                    <span className="text-xs text-cyan-400 font-mono block mt-0.5">UID: 512948103 · Clan: LAHORE QALANDARS</span>
-                  </div>
-                </div>
-                <div className="text-right font-mono text-xs">
-                  <span className="text-white font-bold block text-sm">9 Kills avg</span>
-                  <span className="text-emerald-400 text-xs">26% Win Rate</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* =========================================================================
             TAB 3: REVIEWS & COMMUNITY RATINGS

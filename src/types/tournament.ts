@@ -1,4 +1,5 @@
 export type GameType = 'PUBG' | 'FREE_FIRE';
+export type PubgMatchId = 'ERANGEL' | 'LIVIK' | 'TDM';
 
 export type TournamentStatus = 
   | 'REGISTRATION_OPEN'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -24,9 +24,15 @@ import {
   Gift,
   Bell,
   Send,
-  CheckCircle2
+  CheckCircle2,
+  Wallet,
+  Copy,
+  CheckCircle,
+  XCircle,
+  Banknote,
+  DollarSign
 } from 'lucide-react';
-import { Tournament, TournamentStatus, Seat } from '../types/tournament';
+import { Tournament, TournamentStatus, Seat, CashOutRequest, CashOutStatus } from '../types/tournament';
 
 interface AdminPortalModalProps {
   isOpen: boolean;
@@ -35,8 +41,27 @@ interface AdminPortalModalProps {
   onLogin: (token: string) => void;
   onLogout: () => void;
   tournament: Tournament | null;
+  erangelTournament?: Tournament;
+  livikTournament?: Tournament;
+  tdmTournament?: Tournament;
+  freeFireTournament?: Tournament;
+  initialMatch?: 'ERANGEL' | 'LIVIK' | 'TDM' | 'FREE_FIRE' | null;
   onRefreshData: () => void;
   onNoticeUpdated?: () => void;
+  onUpdateMatchSchedule?: (
+    matchId: 'ERANGEL' | 'LIVIK' | 'TDM' | 'FREE_FIRE',
+    schedule: {
+      matchDate: string;
+      matchTime: string;
+      matchStartTime: number;
+      roomOpenTime: number;
+      matchEndTime: number;
+      roomId: string;
+      roomPassword: string;
+      youtubeUrl: string;
+      manualStatus: TournamentStatus | 'AUTO';
+    }
+  ) => void;
 }
 
 export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
@@ -46,11 +71,20 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   onLogin,
   onLogout,
   tournament,
+  erangelTournament,
+  livikTournament,
+  tdmTournament,
+  freeFireTournament,
+  initialMatch,
   onRefreshData,
-  onNoticeUpdated
+  onNoticeUpdated,
+  onUpdateMatchSchedule
 }) => {
-  // Active Tab: 'schedule' | 'seats' | 'reward' | 'notice'
-  const [activeTab, setActiveTab] = useState<'schedule' | 'seats' | 'reward' | 'notice'>('schedule');
+  // Active Tab: 'schedule' | 'seats' | 'cashouts' | 'reward' | 'notice'
+  const [activeTab, setActiveTab] = useState<'schedule' | 'seats' | 'cashouts' | 'reward' | 'notice'>('schedule');
+  const [selectedMatch, setSelectedMatch] = useState<'ERANGEL' | 'LIVIK' | 'TDM' | 'FREE_FIRE'>(
+    initialMatch || 'ERANGEL'
+  );
 
   // Login form state
   const [password, setPassword] = useState('');
@@ -80,6 +114,12 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     if (!rawTime) rawTime = '11:00';
     if (!cleanDate) cleanDate = getTodayKarachiDate();
 
+    // Normalize date format if in DD-MM-YYYY or DD/MM/YYYY
+    if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(cleanDate)) {
+      const parts = cleanDate.split(/[-/]/);
+      cleanDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+
     const ampmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
     if (ampmMatch) {
       let hours = parseInt(ampmMatch[1], 10);
@@ -97,20 +137,12 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   };
 
   // 1. MATCH SCHEDULE & ROOM SETTINGS
-  const [editDate, setEditDate] = useState(() => {
-    const today = getTodayKarachiDate();
-    if (tournament?.matchDate && tournament.matchDate >= today) return tournament.matchDate;
-    return today;
-  });
-  const [editTime, setEditTime] = useState(tournament?.matchTime || '11:00');
-  const [editRoomId, setEditRoomId] = useState(tournament?.roomId || '69151604');
-  const [editPassword, setEditPassword] = useState(tournament?.roomPassword || '1234');
-  const [editYoutube, setEditYoutube] = useState(
-    tournament?.youtubeUrl || 'https://youtube.com/@flaregunpk?si=NycZ9BwNyELH405i'
-  );
-  const [manualStatus, setManualStatus] = useState<TournamentStatus | 'AUTO'>(
-    (tournament?.manualStatus as any) || 'AUTO'
-  );
+  const [editDate, setEditDate] = useState(() => getTodayKarachiDate());
+  const [editTime, setEditTime] = useState('11:00');
+  const [editRoomId, setEditRoomId] = useState('69151604');
+  const [editPassword, setEditPassword] = useState('1234');
+  const [editYoutube, setEditYoutube] = useState('https://youtube.com/@flaregunpk?si=NycZ9BwNyELH405i');
+  const [manualStatus, setManualStatus] = useState<TournamentStatus | 'AUTO'>('AUTO');
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [scheduleSuccessMsg, setScheduleSuccessMsg] = useState<string | null>(null);
 
@@ -140,22 +172,276 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const [isSavingNotice, setIsSavingNotice] = useState(false);
   const [noticeFeedback, setNoticeFeedback] = useState<string | null>(null);
 
-  // Synchronize inputs when tournament updates
-  useEffect(() => {
-    if (tournament) {
-      const today = getTodayKarachiDate();
-      if (tournament.matchDate && tournament.matchDate >= today) {
-        setEditDate(tournament.matchDate);
-      } else {
-        setEditDate(today);
+  // 5. CASHOUT WITHDRAWAL REQUESTS
+  const [cashoutRequests, setCashoutRequests] = useState<CashOutRequest[]>([]);
+  const [isLoadingCashouts, setIsLoadingCashouts] = useState(false);
+  const [cashoutFilter, setCashoutFilter] = useState<'ALL' | 'Pending' | 'Approved' | 'Paid' | 'Rejected'>('ALL');
+  const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
+  const [cashoutFeedback, setCashoutFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedCashoutId, setCopiedCashoutId] = useState<string | null>(null);
+
+  const fetchCashouts = useCallback(async () => {
+    setIsLoadingCashouts(true);
+    try {
+      let list: CashOutRequest[] = [];
+      const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+
+      // 1. Try server admin route with auth header
+      try {
+        const headers: Record<string, string> = {};
+        if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+        const res = await fetch('/api/admin/cashouts', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && Array.isArray(data.requests)) {
+            list = data.requests;
+          }
+        }
+      } catch {}
+
+      // 2. Direct authoritative Firebase Realtime DB sync fallback
+      if (list.length === 0) {
+        try {
+          const fbRes = await fetch(`${FIREBASE_DB_URL}/CashOutRequests.json`);
+          if (fbRes.ok) {
+            const fbData = await fbRes.json();
+            if (fbData && typeof fbData === 'object') {
+              list = Object.values(fbData) as CashOutRequest[];
+            }
+          }
+        } catch {}
       }
-      if (tournament.matchTime) setEditTime(tournament.matchTime);
-      if (tournament.roomId) setEditRoomId(tournament.roomId);
-      if (tournament.roomPassword) setEditPassword(tournament.roomPassword);
-      if (tournament.youtubeUrl) setEditYoutube(tournament.youtubeUrl);
-      if (tournament.manualStatus) setManualStatus(tournament.manualStatus as any);
+
+      list.sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
+      setCashoutRequests(list);
+    } catch (err: any) {
+      console.warn('Error fetching cashout requests:', err);
+    } finally {
+      setIsLoadingCashouts(false);
     }
-  }, [tournament]);
+  }, [adminToken]);
+
+  // Handle Approve, Cancel/Reject, or Mark Paid for Cashout Request
+  const handleCashoutAction = async (
+    req: CashOutRequest,
+    action: 'APPROVE' | 'REJECT' | 'PAID',
+    reason?: string
+  ) => {
+    setActionInProgressId(req.requestId);
+    setCashoutFeedback(null);
+    const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+
+    try {
+      // 1. Send status update to server endpoint
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+
+        await fetch(`/api/admin/cashouts/${encodeURIComponent(req.requestId)}/status`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            action,
+            adminNote: action === 'APPROVE' ? 'Approved by Admin' : action === 'PAID' ? 'Payment sent' : 'Request cancelled by Admin',
+            rejectionReason: reason || 'Request cancelled by Admin'
+          })
+        });
+      } catch {}
+
+      // 2. Direct Firebase Realtime DB immediate sync
+      const targetStatus: CashOutStatus = action === 'APPROVE' ? 'Approved' : action === 'PAID' ? 'Paid' : 'Rejected';
+      const updatedReq: CashOutRequest = {
+        ...req,
+        status: targetStatus,
+        reviewedAt: Date.now(),
+        reviewedBy: 'Tournament Admin',
+        adminNote: action === 'APPROVE' ? 'Approved by Admin' : action === 'PAID' ? 'Payment sent' : (reason || 'Cancelled by Admin'),
+        ...(action === 'REJECT' ? { rejectionReason: reason || 'Cancelled by Admin' } : {}),
+        ...(action === 'PAID' ? { paidAt: Date.now() } : {})
+      };
+
+      try {
+        await fetch(`${FIREBASE_DB_URL}/CashOutRequests/${encodeURIComponent(req.requestId)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedReq)
+        });
+
+        // If action is REJECT (Cancel), refund the player's balance in Firebase RTDB
+        if (action === 'REJECT' && req.status !== 'Rejected') {
+          try {
+            const uRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(req.userUid)}.json`);
+            if (uRes.ok) {
+              const uText = await uRes.text();
+              if (uText && uText.trim() !== 'null' && uText.trim().startsWith('{')) {
+                const uData = JSON.parse(uText);
+                const curBal = Number(uData.balance) || 0;
+                const reservedBal = Number(uData.reservedWithdrawalBalance) || 0;
+                uData.balance = curBal + req.withdrawalAmountPKR;
+                uData.reservedWithdrawalBalance = Math.max(0, reservedBal - req.withdrawalAmountPKR);
+                await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(req.userUid)}.json`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(uData)
+                });
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+
+      // Update in local state immediately
+      setCashoutRequests(prev => prev.map(item => item.requestId === req.requestId ? updatedReq : item));
+
+      if (action === 'APPROVE') {
+        setCashoutFeedback({
+          type: 'success',
+          text: `Request #${req.requestId} (PKR ${req.withdrawalAmountPKR}) Approved successfully!`
+        });
+      } else if (action === 'REJECT') {
+        setCashoutFeedback({
+          type: 'success',
+          text: `Request #${req.requestId} Cancelled! PKR ${req.withdrawalAmountPKR} refunded to UID ${req.userUid}.`
+        });
+      } else {
+        setCashoutFeedback({
+          type: 'success',
+          text: `Request #${req.requestId} marked as Paid!`
+        });
+      }
+
+      onRefreshData();
+      setTimeout(() => setCashoutFeedback(null), 5000);
+    } catch (err: any) {
+      setCashoutFeedback({ type: 'error', text: err.message || 'Error updating cash-out request.' });
+    } finally {
+      setActionInProgressId(null);
+    }
+  };
+
+  const handleCopyCashout = (text: string, id: string) => {
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedCashoutId(id);
+      setTimeout(() => setCopiedCashoutId(null), 2000);
+    } catch {}
+  };
+
+  const formatPKTDate = (timestamp?: number) => {
+    if (!timestamp) return 'N/A';
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Karachi',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }).format(new Date(timestamp));
+    } catch {
+      return new Date(timestamp).toLocaleString();
+    }
+  };
+
+  const renderCashoutStatusBadge = (status: CashOutStatus) => {
+    switch (status) {
+      case 'Pending':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.3)] animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            Pending Review
+          </span>
+        );
+      case 'Approved':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+            <Check className="w-3 h-3 text-emerald-400" />
+            Approved
+          </span>
+        );
+      case 'Processing':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/50">
+            <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />
+            Processing
+          </span>
+        );
+      case 'Paid':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-500/50">
+            <CheckCircle2 className="w-3 h-3 text-teal-400" />
+            Paid
+          </span>
+        );
+      case 'Rejected':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/50">
+            <X className="w-3 h-3 text-rose-400" />
+            Cancelled / Rejected
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300">
+            {status}
+          </span>
+        );
+    }
+  };
+
+  const getActiveMatchData = (matchKey: 'ERANGEL' | 'LIVIK' | 'TDM' | 'FREE_FIRE'): Tournament | null => {
+    if (matchKey === 'ERANGEL') return erangelTournament || tournament;
+    if (matchKey === 'LIVIK') return livikTournament || null;
+    if (matchKey === 'TDM') return tdmTournament || null;
+    if (matchKey === 'FREE_FIRE') return freeFireTournament || null;
+    return tournament;
+  };
+
+  // Dedicated match selector that smoothly populates form fields for that exact match
+  const handleSelectMatch = (matchKey: 'ERANGEL' | 'LIVIK' | 'TDM' | 'FREE_FIRE') => {
+    setSelectedMatch(matchKey);
+    const activeT = getActiveMatchData(matchKey);
+    const today = getTodayKarachiDate();
+    if (activeT) {
+      setEditDate(activeT.matchDate || today);
+      setEditTime(activeT.matchTime || (matchKey === 'LIVIK' ? '12:00' : matchKey === 'TDM' ? '01:00' : '11:00'));
+      setEditRoomId(activeT.roomId || (matchKey === 'LIVIK' ? '78210943' : matchKey === 'TDM' ? '89102431' : '69151604'));
+      setEditPassword(activeT.roomPassword || (matchKey === 'LIVIK' ? '5678' : matchKey === 'TDM' ? '9999' : '1234'));
+      setEditYoutube(activeT.youtubeUrl || 'https://youtube.com/@flaregunpk?si=NycZ9BwNyELH405i');
+      setManualStatus((activeT.manualStatus as any) || 'AUTO');
+    }
+
+    // Direct check against Firebase RTDB for this specific match
+    fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournaments/${matchKey}.json`)
+      .then(r => r.json())
+      .then(fbData => {
+        if (fbData && typeof fbData === 'object') {
+          if (fbData.matchDate) setEditDate(fbData.matchDate);
+          if (fbData.matchTime) setEditTime(fbData.matchTime);
+          if (fbData.roomId) setEditRoomId(fbData.roomId);
+          if (fbData.roomPassword) setEditPassword(fbData.roomPassword);
+          if (fbData.youtubeUrl) setEditYoutube(fbData.youtubeUrl);
+          if (fbData.manualStatus) setManualStatus(fbData.manualStatus);
+        }
+      })
+      .catch(() => {});
+  };
+
+  // Synchronize inputs when modal opens or initialMatch changes (does NOT get wiped by background poll)
+  useEffect(() => {
+    if (isOpen) {
+      const matchToOpen = initialMatch || 'ERANGEL';
+      handleSelectMatch(matchToOpen);
+    }
+  }, [isOpen, initialMatch]);
+
+  // Fetch cashout withdrawal requests when admin is logged in
+  useEffect(() => {
+    if (isOpen && adminToken) {
+      fetchCashouts();
+    }
+  }, [isOpen, adminToken, activeTab, fetchCashouts]);
 
   // Load active notice on mount
   useEffect(() => {
@@ -251,11 +537,12 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   };
 
   // Save Schedule & Room Settings to Firebase RTDB
-  const handleSaveSchedule = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSchedule = async (e?: React.FormEvent, overrideStatus?: TournamentStatus | 'AUTO') => {
+    if (e) e.preventDefault();
     setIsSavingSchedule(true);
     setScheduleSuccessMsg(null);
 
+    const targetStatus = overrideStatus !== undefined ? overrideStatus : (manualStatus || 'AUTO');
     const cleanDate = editDate.trim() || getTodayKarachiDate();
     const cleanTime = editTime.trim() || '11:00';
     const computedStartTime = parseKarachiTimestamp(cleanDate, cleanTime);
@@ -264,22 +551,33 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       matchDate: cleanDate,
       matchTime: cleanTime,
       matchStartTime: computedStartTime,
-      roomOpenTime: computedStartTime,
+      roomOpenTime: targetStatus === 'ROOM_OPEN' ? Date.now() : (computedStartTime - 15 * 60 * 1000),
       matchEndTime: computedStartTime + 60 * 60 * 1000,
       roomId: editRoomId.trim(),
       roomPassword: editPassword.trim(),
       youtubeUrl: editYoutube.trim(),
-      manualStatus: manualStatus || 'AUTO',
+      manualStatus: targetStatus,
       updatedAt: Date.now()
     };
 
     try {
-      // 1. Direct authoritative write to Firebase RTDB FIRST (Always works, instant sync)
-      await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json', {
+      const FIREBASE_DB_URL = 'https://pubg-matches-43fa1-default-rtdb.firebaseio.com';
+
+      // 1. Direct authoritative write to Firebase RTDB for selected match
+      await fetch(`${FIREBASE_DB_URL}/tournaments/${selectedMatch}.json`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      });
+      }).catch(() => {});
+
+      // If Erangel, also write to legacy /tournament/current.json for squardwar.site backward compatibility
+      if (selectedMatch === 'ERANGEL') {
+        await fetch(`${FIREBASE_DB_URL}/tournament/current.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch(() => {});
+      }
 
       // 2. Also notify backend edge if available
       try {
@@ -288,20 +586,48 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         fetch('/api/admin/tournament/update', {
           method: 'POST',
           headers,
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, matchId: selectedMatch })
         }).catch(() => {});
       } catch {}
 
-      setScheduleSuccessMsg('Match schedule, Room ID & countdown saved to Firebase successfully!');
+      // 3. Immediately update local state & local storage
+      if (onUpdateMatchSchedule) {
+        onUpdateMatchSchedule(selectedMatch, payload as any);
+      }
+
+      const matchLabels: Record<string, string> = {
+        ERANGEL: 'Erangel Squad',
+        LIVIK: 'Livik Duo',
+        TDM: 'Team Death Match (TDM)',
+        FREE_FIRE: 'Free Fire Clash Squad'
+      };
+
+      const statusLabels: Record<string, string> = {
+        ROOM_OPEN: 'ROOM OPEN (Credentials Ready & Unlocked)',
+        MATCH_LIVE: 'MATCH LIVE',
+        WAIT_FOR_RESULT: 'ENDED (Result Processing)',
+        AUTO: 'AUTOMATIC CLOCK'
+      };
+
+      setScheduleSuccessMsg(`✅ ${matchLabels[selectedMatch] || selectedMatch}: ${statusLabels[targetStatus] || targetStatus} applied successfully! (Time: ${cleanTime} PKT)`);
       onRefreshData();
-      setTimeout(() => setScheduleSuccessMsg(null), 3500);
+      setTimeout(() => setScheduleSuccessMsg(null), 4000);
     } catch {
+      if (onUpdateMatchSchedule) {
+        onUpdateMatchSchedule(selectedMatch, payload as any);
+      }
       setScheduleSuccessMsg('Saved locally.');
       onRefreshData();
       setTimeout(() => setScheduleSuccessMsg(null), 3000);
     } finally {
       setIsSavingSchedule(false);
     }
+  };
+
+  // Quick 1-click apply for lifecycle buttons (Instantly activates Room Open, Live, or Auto)
+  const handleQuickStatusApply = async (newStatus: TournamentStatus | 'AUTO') => {
+    setManualStatus(newStatus);
+    await handleSaveSchedule(undefined, newStatus);
   };
 
   // Reset All Seats (Opens Fresh Seats for New Match)
@@ -710,8 +1036,8 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         ) : (
           /* LOGGED IN ADMIN PANEL (2 CLEAN SECTIONS) */
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-            {/* 4 Navigation Tabs */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-[#100a06] border border-amber-900/40 rounded-xl">
+            {/* 5 Navigation Tabs */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 bg-[#100a06] border border-amber-900/40 rounded-xl">
               <button
                 type="button"
                 onClick={() => setActiveTab('schedule')}
@@ -736,6 +1062,26 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               >
                 <Users className="w-3.5 h-3.5" />
                 <span className="truncate">Seats ({occupiedCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('cashouts')}
+                className={`py-2 px-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
+                  activeTab === 'cashouts'
+                    ? 'bg-amber-500 text-black shadow font-black'
+                    : 'text-amber-200/70 hover:text-white hover:bg-amber-950/30'
+                }`}
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span className="truncate">Cashouts</span>
+                {cashoutRequests.filter(r => r.status === 'Pending').length > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black shrink-0 ${
+                    activeTab === 'cashouts' ? 'bg-black text-amber-300' : 'bg-red-500 text-white animate-pulse'
+                  }`}>
+                    {cashoutRequests.filter(r => r.status === 'Pending').length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -783,18 +1129,107 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                   </div>
                 )}
 
-                {/* Quick Lifecycle Presets */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block font-mono">
-                    Match Lifecycle Mode:
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* 1. SELECT MATCH TO CONFIGURE */}
+                <div className="space-y-1.5 p-3 rounded-2xl bg-[#140c07] border border-amber-600/40">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Select Match to Configure:</span>
+                    </label>
+                    <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-600/40">
+                      {selectedMatch}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setManualStatus('AUTO')}
+                      onClick={() => handleSelectMatch('ERANGEL')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        selectedMatch === 'ERANGEL'
+                          ? 'bg-amber-500 text-black border-amber-400 shadow-md font-black ring-2 ring-amber-400/50'
+                          : 'bg-[#1b1009] border-amber-900/40 text-amber-200/70 hover:text-white hover:bg-amber-950/40'
+                      }`}
+                    >
+                      <div className="text-xs font-bold truncate">Erangel Squad</div>
+                      <div className={`text-[10px] truncate ${selectedMatch === 'ERANGEL' ? 'text-black/80 font-mono font-bold' : 'text-amber-300/60 font-mono'}`}>
+                        {erangelTournament?.matchTime || '11:00'} PKT
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMatch('LIVIK')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        selectedMatch === 'LIVIK'
+                          ? 'bg-cyan-500 text-black border-cyan-400 shadow-md font-black ring-2 ring-cyan-400/50'
+                          : 'bg-[#091522] border-cyan-900/40 text-cyan-200/70 hover:text-white hover:bg-cyan-950/40'
+                      }`}
+                    >
+                      <div className="text-xs font-bold truncate">Livik Duo</div>
+                      <div className={`text-[10px] truncate ${selectedMatch === 'LIVIK' ? 'text-black/80 font-mono font-bold' : 'text-cyan-300/60 font-mono'}`}>
+                        {livikTournament?.matchTime || '12:00'} PKT
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMatch('TDM')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        selectedMatch === 'TDM'
+                          ? 'bg-red-500 text-white border-red-400 shadow-md font-black ring-2 ring-red-400/50'
+                          : 'bg-[#1b0b0b] border-red-900/40 text-red-200/70 hover:text-white hover:bg-red-950/40'
+                      }`}
+                    >
+                      <div className="text-xs font-bold truncate">TDM (4v4)</div>
+                      <div className={`text-[10px] truncate ${selectedMatch === 'TDM' ? 'text-white/90 font-mono font-bold' : 'text-red-300/60 font-mono'}`}>
+                        {tdmTournament?.matchTime || '01:00'} PKT
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMatch('FREE_FIRE')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        selectedMatch === 'FREE_FIRE'
+                          ? 'bg-orange-500 text-black border-orange-400 shadow-md font-black ring-2 ring-orange-400/50'
+                          : 'bg-[#1b0e06] border-orange-900/40 text-orange-200/70 hover:text-white hover:bg-orange-950/40'
+                      }`}
+                    >
+                      <div className="text-xs font-bold truncate">Free Fire</div>
+                      <div className={`text-[10px] truncate ${selectedMatch === 'FREE_FIRE' ? 'text-black/80 font-mono font-bold' : 'text-orange-300/60 font-mono'}`}>
+                        {freeFireTournament?.matchTime || '11:00'} PKT
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Lifecycle Presets with Instant 1-Click Apply */}
+                <div className="space-y-1.5 p-3 rounded-2xl bg-[#140c07] border border-amber-600/40">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{selectedMatch} Lifecycle (Click to Activate Instantly):</span>
+                    </label>
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                      manualStatus === 'ROOM_OPEN'
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-500 animate-pulse'
+                        : manualStatus === 'MATCH_LIVE'
+                          ? 'bg-red-950 text-red-300 border-red-500'
+                          : 'bg-amber-950 text-amber-300 border-amber-600'
+                    }`}>
+                      Current: {manualStatus}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isSavingSchedule}
+                      onClick={() => handleQuickStatusApply('AUTO')}
                       className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                         manualStatus === 'AUTO'
-                          ? 'bg-amber-950/80 border-amber-500 text-white shadow'
+                          ? 'bg-amber-950/80 border-amber-500 text-white shadow ring-2 ring-amber-400/40'
                           : 'bg-[#18100a] border-amber-900/30 text-amber-200/60 hover:text-white hover:border-amber-700/50'
                       }`}
                     >
@@ -806,25 +1241,27 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => setManualStatus('ROOM_OPEN')}
+                      disabled={isSavingSchedule}
+                      onClick={() => handleQuickStatusApply('ROOM_OPEN')}
                       className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                         manualStatus === 'ROOM_OPEN'
-                          ? 'bg-emerald-950/80 border-emerald-500 text-white shadow'
-                          : 'bg-[#18100a] border-amber-900/30 text-amber-200/60 hover:text-white hover:border-amber-700/50'
+                          ? 'bg-emerald-950/90 border-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] ring-2 ring-emerald-400'
+                          : 'bg-[#0f1f17] border-emerald-800/40 text-emerald-200/70 hover:text-white hover:border-emerald-500/70 hover:bg-emerald-950/50'
                       }`}
                     >
                       <div className="text-xs font-bold text-emerald-300 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-emerald-400" /> Room Open
+                        <Clock className="w-3 h-3 text-emerald-400 animate-spin" style={{ animationDuration: '6s' }} /> Room Open
                       </div>
-                      <div className="text-[10px] text-emerald-200/50">15-Min Window</div>
+                      <div className="text-[10px] text-emerald-300/80 font-bold">⚡ Click to Open</div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setManualStatus('MATCH_LIVE')}
+                      disabled={isSavingSchedule}
+                      onClick={() => handleQuickStatusApply('MATCH_LIVE')}
                       className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                         manualStatus === 'MATCH_LIVE'
-                          ? 'bg-red-950/80 border-red-500 text-white shadow'
+                          ? 'bg-red-950/80 border-red-500 text-white shadow ring-2 ring-red-400/40'
                           : 'bg-[#18100a] border-amber-900/30 text-amber-200/60 hover:text-white hover:border-amber-700/50'
                       }`}
                     >
@@ -836,10 +1273,11 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => setManualStatus('WAIT_FOR_RESULT')}
+                      disabled={isSavingSchedule}
+                      onClick={() => handleQuickStatusApply('WAIT_FOR_RESULT')}
                       className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                         manualStatus === 'WAIT_FOR_RESULT'
-                          ? 'bg-amber-950/80 border-amber-500 text-white shadow'
+                          ? 'bg-amber-950/80 border-amber-500 text-white shadow ring-2 ring-amber-400/40'
                           : 'bg-[#18100a] border-amber-900/30 text-amber-200/60 hover:text-white hover:border-amber-700/50'
                       }`}
                     >
@@ -1122,6 +1560,327 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* TAB: CASHOUT WITHDRAWAL REQUESTS (Approve / Cancel & Status Review) */}
+            {activeTab === 'cashouts' && (
+              <div className="space-y-4">
+                {/* Feedback Toast */}
+                {cashoutFeedback && (
+                  <div
+                    className={`p-3 sm:p-4 rounded-xl border flex items-center justify-between gap-3 text-xs font-semibold animate-in slide-in-from-top-2 ${
+                      cashoutFeedback.type === 'success'
+                        ? 'bg-emerald-950/90 border-emerald-500/70 text-emerald-200'
+                        : 'bg-rose-950/90 border-rose-500/70 text-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {cashoutFeedback.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      )}
+                      <span>{cashoutFeedback.text}</span>
+                    </div>
+                    <button
+                      onClick={() => setCashoutFeedback(null)}
+                      className="text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Header Information Card with Real-time Refresh */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-[#160d07] to-amber-950/40 border border-amber-600/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-heading font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        <span>Cash-Out Requests Portal</span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono border border-amber-500/40">
+                          {cashoutRequests.length} Total
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-amber-200/70 mt-0.5 leading-relaxed">
+                        EasyPaisa, JazzCash &amp; Bank withdrawal requests. Approve to verify, or Cancel to reject &amp; refund balance to player.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={fetchCashouts}
+                    disabled={isLoadingCashouts}
+                    className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-[#22160e] hover:bg-amber-950/80 text-amber-200 border border-amber-800/50 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isLoadingCashouts ? 'animate-spin' : ''}`} />
+                    <span>{isLoadingCashouts ? 'Refreshing...' : 'Refresh List'}</span>
+                  </button>
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex flex-wrap gap-1.5 p-1 bg-[#100a06] border border-amber-900/30 rounded-xl text-xs">
+                  {(['ALL', 'Pending', 'Approved', 'Paid', 'Rejected'] as const).map((filter) => {
+                    const count = filter === 'ALL'
+                      ? cashoutRequests.length
+                      : cashoutRequests.filter(r => r.status === filter).length;
+                    return (
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setCashoutFilter(filter)}
+                        className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          cashoutFilter === filter
+                            ? 'bg-amber-500 text-black shadow font-black'
+                            : 'text-amber-200/60 hover:text-white hover:bg-amber-950/30'
+                        }`}
+                      >
+                        <span>{filter === 'ALL' ? 'All Requests' : filter}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                          cashoutFilter === filter ? 'bg-black/20 text-black' : 'bg-[#22160e] text-amber-300'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Requests List */}
+                {isLoadingCashouts && cashoutRequests.length === 0 ? (
+                  <div className="text-center py-12 px-4 rounded-xl bg-[#140d07] border border-amber-900/30 space-y-2">
+                    <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
+                    <p className="text-xs text-amber-200/70 font-mono">Loading cash-out requests...</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const filtered = cashoutFilter === 'ALL'
+                      ? cashoutRequests
+                      : cashoutRequests.filter(r => r.status === cashoutFilter);
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-10 px-4 rounded-xl bg-[#140d07] border border-amber-900/30 space-y-2">
+                          <Wallet className="w-8 h-8 text-amber-500/30 mx-auto" />
+                          <h5 className="text-xs font-bold uppercase tracking-wider text-amber-200">
+                            No {cashoutFilter !== 'ALL' ? cashoutFilter : ''} Requests Found
+                          </h5>
+                          <p className="text-[11px] text-amber-200/50 max-w-sm mx-auto">
+                            When players request a cash-out, it will automatically show here with payment details and Approve / Cancel actions.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {filtered.map((req) => {
+                          const isActing = actionInProgressId === req.requestId;
+                          const isCopiedAcc = copiedCashoutId === `acc_${req.requestId}`;
+                          const isCopiedUid = copiedCashoutId === `uid_${req.requestId}`;
+
+                          return (
+                            <div
+                              key={req.requestId}
+                              className={`p-4 rounded-xl bg-[#140d07] border transition-all space-y-3 shadow-lg ${
+                                req.status === 'Pending'
+                                  ? 'border-amber-500/60 shadow-amber-950/40'
+                                  : req.status === 'Approved'
+                                  ? 'border-emerald-500/40'
+                                  : req.status === 'Paid'
+                                  ? 'border-teal-500/30'
+                                  : 'border-slate-800 opacity-80'
+                              }`}
+                            >
+                              {/* Top Bar: ID, Date & Status */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-900/30 pb-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-black text-amber-300">
+                                    #{req.requestId}
+                                  </span>
+                                  <span className="text-[11px] text-amber-200/50">·</span>
+                                  <span className="text-[11px] text-amber-200/60 font-mono">
+                                    {formatPKTDate(req.requestedAt)}
+                                  </span>
+                                </div>
+                                <div>
+                                  {renderCashoutStatusBadge(req.status)}
+                                </div>
+                              </div>
+
+                              {/* Amount & Account Details Grid */}
+                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-center">
+                                {/* Amount Callout (col-span-4) */}
+                                <div className="sm:col-span-4 p-3 rounded-lg bg-black/40 border border-amber-900/40 text-center sm:text-left space-y-0.5">
+                                  <span className="text-[10px] uppercase font-bold text-amber-300/70 tracking-wider block">
+                                    Withdrawal Amount
+                                  </span>
+                                  <div className="text-2xl font-heading font-black text-amber-400 font-mono">
+                                    PKR {req.withdrawalAmountPKR}
+                                  </div>
+                                  <div className="text-[10px] text-emerald-400/90 font-mono font-semibold flex items-center justify-center sm:justify-start gap-1">
+                                    <span>Method:</span>
+                                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold">
+                                      {req.paymentMethod}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Player & Account Credentials (col-span-8) */}
+                                <div className="sm:col-span-8 space-y-2 text-xs">
+                                  {/* Player UID & Name */}
+                                  <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-[#1a0f07] border border-amber-900/30">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-amber-200/60 text-[11px]">Player:</span>
+                                      <span className="font-bold text-white">{req.playerName || 'Player'}</span>
+                                      <span className="font-mono text-amber-300 text-[11px] font-semibold">
+                                        (UID: {req.userUid})
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyCashout(req.userUid, `uid_${req.requestId}`)}
+                                      className="px-2 py-0.5 rounded bg-[#2a170c] hover:bg-amber-950 text-amber-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="Copy PUBG UID"
+                                    >
+                                      {isCopiedUid ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-amber-400" />}
+                                      <span>{isCopiedUid ? 'Copied' : 'Copy UID'}</span>
+                                    </button>
+                                  </div>
+
+                                  {/* Account Title & Full Unmasked Number */}
+                                  <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-[#1a0f07] border border-amber-900/30">
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-amber-200/60 text-[11px]">Title:</span>
+                                        <span className="font-bold text-white tracking-wide">{req.accountHolderName}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-amber-200/60 text-[11px]">Acc / Phone:</span>
+                                        <span className="font-mono font-black text-amber-300 text-xs sm:text-sm tracking-wider">
+                                          {req.accountNumber}
+                                        </span>
+                                        {req.bankName && req.paymentMethod === 'Other Bank Account' && (
+                                          <span className="text-[10px] text-amber-200/70 font-mono">
+                                            ({req.bankName})
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyCashout(req.accountNumber, `acc_${req.requestId}`)}
+                                      className="px-2.5 py-1 rounded bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black text-xs font-black flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95 shrink-0"
+                                      title="Copy Account / Mobile Number for Bank Transfer"
+                                    >
+                                      {isCopiedAcc ? <Check className="w-3.5 h-3.5 text-black" /> : <Copy className="w-3.5 h-3.5 text-black" />}
+                                      <span>{isCopiedAcc ? 'Copied!' : 'Copy Number'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Rejection / Note display */}
+                              {req.status === 'Rejected' && req.rejectionReason && (
+                                <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-800/40 text-rose-200 text-xs flex items-center gap-2">
+                                  <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                  <span>Reason: {req.rejectionReason} (Amount has been refunded to player's balance)</span>
+                                </div>
+                              )}
+
+                              {req.adminNote && req.status !== 'Rejected' && (
+                                <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-800/30 text-amber-200 text-xs flex items-center gap-2">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>Admin Note: {req.adminNote}</span>
+                                </div>
+                              )}
+
+                              {/* Action Buttons Row */}
+                              <div className="pt-2 border-t border-amber-900/30 flex flex-wrap items-center gap-2">
+                                {req.status === 'Pending' ? (
+                                  <>
+                                    {/* APPROVE BUTTON */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCashoutAction(req, 'APPROVE')}
+                                      disabled={isActing}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/60 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                                    >
+                                      {isActing ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Check className="w-3.5 h-3.5" />
+                                      )}
+                                      <span>Approve Request</span>
+                                    </button>
+
+                                    {/* CANCEL BUTTON */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCashoutAction(req, 'REJECT', 'Cancelled by Admin')}
+                                      disabled={isActing}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-rose-950 to-red-900 hover:from-rose-900 hover:to-red-800 text-rose-200 hover:text-white border border-rose-700/60 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                                    >
+                                      {isActing ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <X className="w-3.5 h-3.5" />
+                                      )}
+                                      <span>Cancel (Refund)</span>
+                                    </button>
+                                  </>
+                                ) : req.status === 'Approved' ? (
+                                  <>
+                                    {/* MARK AS PAID BUTTON */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCashoutAction(req, 'PAID')}
+                                      disabled={isActing}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                                    >
+                                      {isActing ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                      )}
+                                      <span>Mark as Paid (Cash Sent)</span>
+                                    </button>
+
+                                    {/* CANCEL & REFUND BUTTON */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCashoutAction(req, 'REJECT', 'Cancelled by Admin')}
+                                      disabled={isActing}
+                                      className="py-2 px-3 rounded-xl bg-[#22160e] hover:bg-rose-950/60 text-rose-300 hover:text-rose-200 border border-rose-800/40 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                                    >
+                                      <RotateCcw className="w-3 h-3 text-rose-400" />
+                                      <span>Cancel &amp; Refund</span>
+                                    </button>
+                                  </>
+                                ) : req.status === 'Paid' ? (
+                                  <div className="w-full py-1.5 px-3 rounded-lg bg-teal-950/40 border border-teal-500/30 text-teal-300 text-xs font-semibold flex items-center justify-center gap-1.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+                                    <span>Payment Completed &amp; Sent</span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full py-1.5 px-3 rounded-lg bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center justify-center gap-1.5">
+                                    <X className="w-3.5 h-3.5 text-rose-400" />
+                                    <span>Cancelled &amp; PKR {req.withdrawalAmountPKR} Refunded to User Balance</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
+                )}
               </div>
             )}
 
