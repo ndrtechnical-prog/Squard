@@ -15,7 +15,7 @@ import { PinAuthModal } from './components/PinAuthModal';
 import { TournamentFeaturesModal, FeatureTab } from './components/TournamentFeaturesModal';
 import { NoticeBanner, NoticeData } from './components/NoticeBanner';
 import { NoticesModal } from './components/NoticesModal';
-import { InstallAppModal } from './components/InstallAppModal';
+import { SocialFooter } from './components/SocialFooter';
 import { Tournament, TournamentStatus, GameType, PaymentAccount, PubgMatchId } from './types/tournament';
 import { 
   loadStoredTournament, 
@@ -160,10 +160,6 @@ export default function App() {
   const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
   const [featureModalTab, setFeatureModalTab] = useState<FeatureTab>('REWARD');
 
-  // PWA Install State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-
   // Global Notice State (squardwar.site)
   const [activeNotice, setActiveNotice] = useState<NoticeData | null>(null);
   const [isNoticesModalOpen, setIsNoticesModalOpen] = useState(false);
@@ -192,15 +188,6 @@ export default function App() {
   useEffect(() => {
     fetchActiveNotice();
   }, [fetchActiveNotice]);
-
-  useEffect(() => {
-    const handleBeforeInstall = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-  }, []);
 
   // Open modal with history push so Back button cleanly closes it
   const openWithHistory = useCallback((openFn: () => void) => {
@@ -480,7 +467,6 @@ export default function App() {
     setIsFeatureModalOpen(false);
     setIsPinModalOpen(false);
     setIsNoticesModalOpen(false);
-    setIsInstallModalOpen(false);
   }, []);
 
   // Hardware Back Button (Android / Browser) & ESC Key Support
@@ -1185,7 +1171,6 @@ export default function App() {
         isAdminLoggedIn={Boolean(adminToken)}
         onEditPubgId={handleEditPubgId}
         onOpenBookings={() => openWithHistory(() => setIsDrawerOpen(true))}
-        onOpenInstallApp={() => openWithHistory(() => setIsInstallModalOpen(true))}
       />
 
       {/* Floating Welcome / Auth Notification */}
@@ -1197,7 +1182,7 @@ export default function App() {
       )}
 
       {/* 2. MAIN VIEWPORT */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-6 sm:pb-8">
         {/* 3 ICON BUTTONS IN EASYPAISA STYLE:
             PUBG: REWARD · NOTICES · REVIEWS
             FREE FIRE: REWARD · CASHOUT · REVIEWS */}
@@ -1288,6 +1273,9 @@ export default function App() {
         )}
       </main>
 
+      {/* 3. FOOTER (Google-style Minimal 3-Line Section) */}
+      <SocialFooter />
+
       {/* 4. MODALS */}
       {/* Simple Seat Booking Modal with [-] 1 [+] and dynamic PUBG ID boxes */}
       <BookingModal
@@ -1352,7 +1340,6 @@ export default function App() {
         onOpenAdmin={() => openWithHistory(() => setIsAdminOpen(true))}
         onClearPubgId={handleClearPubgId}
         onEditPubgId={handleEditPubgId}
-        onOpenInstallApp={() => openWithHistory(() => setIsInstallModalOpen(true))}
       />
 
       {/* Easypaisa-style features modal (REWARD, NOTICES, REVIEWS) */}
@@ -1391,13 +1378,6 @@ export default function App() {
         isOpen={isNoticesModalOpen}
         onClose={() => setIsNoticesModalOpen(false)}
         notice={activeNotice}
-      />
-
-      {/* Squard War PWA Install Modal */}
-      <InstallAppModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-        deferredPrompt={deferredPrompt}
       />
     </div>
   );

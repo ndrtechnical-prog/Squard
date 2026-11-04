@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Flame, Plus, ShieldCheck, User, Trophy, Download } from 'lucide-react';
+import { Menu, Flame, Plus, ShieldCheck, User, Trophy } from 'lucide-react';
 import { GameType } from '../types/tournament';
 
 interface HeaderProps {
@@ -14,7 +14,6 @@ interface HeaderProps {
   isAdminLoggedIn: boolean;
   onEditPubgId?: () => void;
   onOpenBookings?: () => void;
-  onOpenInstallApp?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,8 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdmin,
   isAdminLoggedIn,
   onEditPubgId,
-  onOpenBookings,
-  onOpenInstallApp
+  onOpenBookings
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0d0906]/95 backdrop-blur-md border-b border-amber-900/30 px-3 sm:px-6 py-2.5">
@@ -74,23 +72,9 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Right: Actions (Install App, My Bookings, Account, Diamond Balance) */}
+        {/* Right: Actions (My Bookings, Account, Diamond Balance) */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* 1. App Install Button (Requested by User) */}
-          {onOpenInstallApp && (
-            <button
-              type="button"
-              onClick={onOpenInstallApp}
-              title="Install Squard War to Home Screen"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 border border-amber-500/70 text-xs font-bold text-amber-300 transition-all cursor-pointer shadow-sm active:scale-95"
-            >
-              <Download className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="hidden md:inline font-heading uppercase tracking-wide">Install App</span>
-              <span className="md:hidden">App</span>
-            </button>
-          )}
-
-          {/* 2. My Bookings Button */}
+          {/* 1. My Bookings Button */}
           {savedPubgId && (
             <button
               type="button"

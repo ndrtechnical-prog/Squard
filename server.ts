@@ -744,8 +744,51 @@ const evaluateTournamentStatus = () => {
 };
 
 // ==========================================
-// PUBLIC API ROUTES
+// PUBLIC API & SEO ROUTES
 // ==========================================
+
+// SEO: Dynamic XML Sitemap matching the requesting host
+// Prevents Google Search Console "URL not allowed" errors by ensuring the loc matches the exact property
+app.get('/sitemap.xml', (req: Request, res: Response) => {
+  const reqHost = (req.get('host') || 'squardwar.site').toLowerCase();
+  const domain = reqHost.includes('squadwar.site') && !reqHost.includes('squardwar.site')
+    ? 'https://squadwar.site'
+    : 'https://squardwar.site';
+  
+  const today = new Date().toISOString().split('T')[0];
+
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${domain}/</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`);
+});
+
+// SEO: Dynamic Robots.txt
+app.get('/robots.txt', (req: Request, res: Response) => {
+  const reqHost = (req.get('host') || 'squardwar.site').toLowerCase();
+  const domain = reqHost.includes('squadwar.site') && !reqHost.includes('squardwar.site')
+    ? 'https://squadwar.site'
+    : 'https://squardwar.site';
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(`User-agent: *
+Allow: /
+
+# Disallow internal backend API endpoints
+Disallow: /api/
+
+# Sitemap directive
+Sitemap: ${domain}/sitemap.xml
+`);
+});
 
 // 1. Get Tournament State & Seats
 app.get('/api/tournament', (req: Request, res: Response) => {

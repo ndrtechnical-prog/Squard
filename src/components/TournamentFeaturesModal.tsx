@@ -930,7 +930,7 @@ export const TournamentFeaturesModal: React.FC<TournamentFeaturesModalProps> = (
                             type="text"
                             value={accountNumber}
                             onChange={(e) => setAccountNumber(e.target.value)}
-                            placeholder={selectedMethod === 'Other Bank Account' ? 'e.g. PK36MEZN000123456789' : 'e.g. 03052838367'}
+                            placeholder={selectedMethod === 'Other Bank Account' ? 'e.g. PK36MEZN000123456789' : 'e.g. 03158812124'}
                             className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-emerald-400 text-xs sm:text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
                             required
                           />

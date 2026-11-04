@@ -4,11 +4,11 @@ const STORAGE_KEY_TOURNAMENT = 'pubg_arena_tournament_v2';
 const STORAGE_KEY_BALANCE = 'pubg_user_diamonds_balance';
 
 export const OFFICIAL_PAYMENT_INFO = {
-  mobile: '03052838367',
+  mobile: '03158812124',
   accountName: 'muhammad Nadir',
   methods: ['Easypaisa', 'Jazzcash'],
   ratePkrPerDiamond: 1, // 1 Diamond = 1 PKR
-  whatsappNumber: '923052838367'
+  whatsappNumber: '923158812124'
 };
 
 export const MATCH_IMAGES = {

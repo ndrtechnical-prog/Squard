@@ -2,34 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   X, 
   Trophy, 
-  Search, 
   Lock, 
   Edit3, 
-  FileText, 
   ShieldCheck, 
-  Mail, 
-  Phone, 
-  MessageCircle, 
-  HelpCircle, 
-  ChevronDown, 
-  ChevronUp, 
-  AlertTriangle, 
-  CheckCircle2, 
-  CreditCard,
-  Building,
-  Clock,
-  ExternalLink,
-  LogOut,
-  User,
-  Sparkles,
-  RefreshCw,
-  Copy,
-  Check,
-  Key,
-  Hash,
-  Loader2,
-  Calendar,
-  Download
+  LogOut, 
+  User, 
+  Sparkles, 
+  RefreshCw, 
+  Copy, 
+  Check, 
+  Loader2, 
+  Calendar 
 } from 'lucide-react';
 import { Tournament } from '../types/tournament';
 
@@ -68,11 +51,7 @@ interface DrawerMenuProps {
   onOpenAdmin: () => void;
   onClearPubgId: () => void;
   onEditPubgId: () => void;
-  onOpenInstallApp?: () => void;
 }
-
-type MenuTab = 'bookings' | 'rules';
-type AccordionSection = 'terms' | 'privacy' | 'contact' | 'faq' | null;
 
 export const DrawerMenu: React.FC<DrawerMenuProps> = ({
   isOpen,
@@ -84,12 +63,8 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
   onOpenResults,
   onOpenAdmin,
   onClearPubgId,
-  onEditPubgId,
-  onOpenInstallApp
+  onEditPubgId
 }) => {
-  const [activeTab, setActiveTab] = useState<MenuTab>('bookings');
-  const [openSection, setOpenSection] = useState<AccordionSection>('terms');
-
   // Bookings state pulled directly from Firebase
   const [bookings, setBookings] = useState<UserBookingItem[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState<boolean>(false);
@@ -98,107 +73,113 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
 
   const cleanUid = (savedPubgId || '').trim();
 
-  // Fetch user reservations from TinyDB (localStorage cache) or Firebase with RTDB fallback
-  const fetchMyBookings = useCallback(async (forceRefresh = false) => {
+  // Load cached bookings from localStorage
+  useEffect(() => {
     if (!cleanUid) {
       setBookings([]);
       return;
     }
-
-    const cacheKey = `pubg_bookings_cache_${cleanUid}`;
-    if (!forceRefresh) {
-      try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
-            setBookings(parsed);
-            setIsLoadingBookings(false);
-            return;
-          }
+    try {
+      const cached = localStorage.getItem(`user_bookings_${cleanUid}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          setBookings(parsed);
         }
-      } catch {}
+      }
+    } catch {}
+  }, [cleanUid]);
+
+  // Direct fetch from Firebase RTDB
+  const fetchMyBookings = useCallback(async () => {
+    if (!cleanUid) {
+      setBookings([]);
+      return;
     }
 
     setIsLoadingBookings(true);
     setBookingError(null);
 
     try {
-      let bookingsList: UserBookingItem[] = [];
-      let fetched = false;
+      const cacheKey = `user_bookings_${cleanUid}`;
+      const bookingsList: UserBookingItem[] = [];
 
-      // 1. Try local/edge API endpoint
-      try {
-        const res = await fetch(`/api/user/my-bookings?pubgUid=${encodeURIComponent(cleanUid)}&t=${Date.now()}`);
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          const data = JSON.parse(text);
-          if (res.ok && data.success && Array.isArray(data.bookings)) {
-            bookingsList = data.bookings;
-            fetched = true;
+      const modes = [
+        { key: 'ERANGEL', path: 'reservations', tPath: 'tournament/current' },
+        { key: 'LIVIK', path: 'reservations_livik', tPath: 'tournament/livik' },
+        { key: 'TDM', path: 'reservations_tdm', tPath: 'tournament/tdm' },
+        { key: 'FREE_FIRE', path: 'reservations_freefire', tPath: 'tournament/freefire' }
+      ];
+
+      for (const mode of modes) {
+        try {
+          const [rRes, tRes] = await Promise.all([
+            fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/${mode.path}.json`),
+            fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/${mode.tPath}.json`)
+          ]);
+
+          let reservations: any = null;
+          let tData: any = null;
+
+          if (rRes.ok) {
+            const rText = await rRes.text();
+            if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) {
+              try { reservations = JSON.parse(rText); } catch {}
+            }
           }
-        }
-      } catch (apiErr) {
-        console.warn('API my-bookings unavailable, scanning Firebase RTDB directly:', apiErr);
-      }
-
-      // 2. Direct client fallback to Firebase RTDB
-      if (!fetched) {
-        const [rRes, tRes] = await Promise.all([
-          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/SeatReservations/PUBG001.json'),
-          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/tournament/current.json')
-        ]);
-
-        let reservations: any = null;
-        let tData: any = null;
-        if (rRes.ok) {
-          const rText = await rRes.text();
-          if (rText && rText.trim() !== 'null' && rText.trim().startsWith('{')) {
-            try { reservations = JSON.parse(rText); } catch {}
+          if (tRes.ok) {
+            const tText = await tRes.text();
+            if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) {
+              try { tData = JSON.parse(tText); } catch {}
+            }
           }
-        }
-        if (tRes.ok) {
-          const tText = await tRes.text();
-          if (tText && tText.trim() !== 'null' && tText.trim().startsWith('{')) {
-            try { tData = JSON.parse(tText); } catch {}
-          }
-        }
 
-        if (reservations && typeof reservations === 'object') {
-          for (let t = 1; t <= 25; t++) {
-            const team = reservations[`TEAM${t}`] || reservations[`Team_${t}`];
-            if (!team || !team.members) continue;
+          if (reservations && typeof reservations === 'object') {
+            const maxTeams = mode.key === 'TDM' ? 2 : (mode.key === 'LIVIK' ? 30 : (mode.key === 'FREE_FIRE' ? 12 : 25));
+            const seatsPerTeam = mode.key === 'LIVIK' ? 2 : 4;
 
-            const members = team.members;
-            for (let s = 1; s <= 4; s++) {
-              let m = Array.isArray(members) ? members[s] : (members[String(s)] || members[s]);
-              if (m && m.uid === cleanUid) {
-                bookingsList.push({
-                  id: `bkg_PUBG001_T${t}S${s}`,
-                  tournamentId: 'PUBG001',
-                  tournamentTitle: tData?.title || 'PUBG Mobile 100-Player Squad Championship',
-                  map: tData?.mapName || 'Erangel',
-                  gameType: tData?.gameType || 'PUBG Mobile',
-                  matchDate: tData?.matchDate || '2026-10-30',
-                  matchTime: tData?.matchTime || '11:00',
-                  matchStartTime: tData?.matchStartTime || (Date.now() + 24 * 3600 * 1000),
-                  teamNumber: t,
-                  teamId: `TEAM${t}`,
-                  seatNumber: s,
-                  role: s === 1 ? 'captain' : 'member',
-                  isCaptain: s === 1,
-                  playerName: m.playerName || 'Player',
-                  playerUid: m.uid,
-                  status: 'APPROVED',
-                  joinedAt: m.joinedAt || Date.now(),
-                  roomId: tData?.roomId || '69151604',
-                  roomPassword: tData?.roomPassword || '1234',
-                  isRoomUnlocked: true,
-                  roomUnlockTime: tData?.roomOpenTime || Date.now()
-                });
+            for (let t = 1; t <= maxTeams; t++) {
+              const team = reservations[`TEAM${t}`] || reservations[`Team_${t}`];
+              if (!team || !team.members) continue;
+
+              const members = team.members;
+              for (let s = 1; s <= seatsPerTeam; s++) {
+                let m = Array.isArray(members) ? members[s] : (members[String(s)] || members[s]);
+                if (m && (m.uid === cleanUid || m.playerUid === cleanUid)) {
+                  const matchTime = tData?.matchTime || '11:00';
+                  const matchDate = tData?.matchDate || new Date().toISOString().split('T')[0];
+                  const roomId = tData?.roomId || '69151604';
+                  const roomPassword = tData?.roomPassword || '1234';
+
+                  bookingsList.push({
+                    id: `bkg_${mode.key}_T${t}S${s}`,
+                    tournamentId: mode.key,
+                    tournamentTitle: tData?.title || `${mode.key} Championship Match`,
+                    map: tData?.mapName || mode.key,
+                    gameType: mode.key === 'FREE_FIRE' ? 'Free Fire' : 'PUBG Mobile',
+                    matchDate,
+                    matchTime,
+                    matchStartTime: tData?.matchStartTime || (Date.now() + 2 * 3600 * 1000),
+                    teamNumber: t,
+                    teamId: `TEAM${t}`,
+                    seatNumber: s,
+                    role: s === 1 ? 'captain' : 'member',
+                    isCaptain: s === 1,
+                    playerName: m.playerName || savedPlayerName || 'Player',
+                    playerUid: cleanUid,
+                    status: 'APPROVED',
+                    joinedAt: m.joinedAt || Date.now(),
+                    roomId,
+                    roomPassword,
+                    isRoomUnlocked: true,
+                    roomUnlockTime: tData?.roomOpenTime || Date.now()
+                  });
+                }
               }
             }
           }
+        } catch (innerErr) {
+          console.warn(`Mode ${mode.key} fetch error:`, innerErr);
         }
       }
 
@@ -213,20 +194,16 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
     } finally {
       setIsLoadingBookings(false);
     }
-  }, [cleanUid]);
+  }, [cleanUid, savedPlayerName]);
 
-  // Fetch whenever menu opens or tab switches to bookings
+  // Fetch whenever menu opens
   useEffect(() => {
-    if (isOpen && activeTab === 'bookings' && cleanUid) {
+    if (isOpen && cleanUid) {
       fetchMyBookings();
     }
-  }, [isOpen, activeTab, cleanUid, fetchMyBookings]);
+  }, [isOpen, cleanUid, fetchMyBookings]);
 
   if (!isOpen) return null;
-
-  const toggleSection = (section: AccordionSection) => {
-    setOpenSection(prev => prev === section ? null : section);
-  };
 
   const copyToClipboard = (text: string, keyId: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -265,452 +242,218 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
             </button>
           </div>
 
-          {/* Install App Quick Action in Menu */}
-          {onOpenInstallApp && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenInstallApp();
-              }}
-              className="w-full p-2.5 rounded-xl bg-gradient-to-r from-amber-600/20 via-amber-500/10 to-amber-600/20 border border-amber-500/50 flex items-center justify-between text-xs text-amber-200 hover:text-white transition-all cursor-pointer shadow-sm group"
-            >
-              <div className="flex items-center gap-2">
-                <Download className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                <span className="font-heading uppercase font-bold tracking-wide">Install Squard War App</span>
+          {/* Section Title Banner: My Bookings & Reservations */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#120a06] border border-amber-900/50">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Trophy className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-mono text-amber-400 font-semibold bg-black/40 px-2 py-0.5 rounded-md">
-                PWA
+              <span className="font-heading uppercase font-bold text-xs tracking-wider text-white">
+                My Bookings &amp; Slots
               </span>
-            </button>
-          )}
+            </div>
 
-          {/* 2. Top Segmented Navigation Tabs */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#120a06] border border-amber-900/40 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab('bookings')}
-              className={`py-2 px-3 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'bookings'
-                  ? 'bg-amber-500 text-black shadow font-black'
-                  : 'text-amber-200/70 hover:text-white hover:bg-amber-950/30'
-              }`}
-            >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>My Bookings</span>
-              {bookings.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  activeTab === 'bookings' ? 'bg-black text-amber-300' : 'bg-amber-500/30 text-amber-300'
-                }`}>
-                  {bookings.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('rules')}
-              className={`py-2 px-3 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'rules'
-                  ? 'bg-amber-500 text-black shadow font-black'
-                  : 'text-amber-200/70 hover:text-white hover:bg-amber-950/30'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Rules &amp; Info</span>
-            </button>
+            {bookings.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-black">
+                {bookings.length} {bookings.length === 1 ? 'Slot' : 'Slots'}
+              </span>
+            )}
           </div>
 
-          {/* TAB 1: MY BOOKINGS (Direct Firebase RTDB Integration) */}
-          {activeTab === 'bookings' && (
-            <div className="space-y-3.5 animate-in fade-in duration-150">
-              {/* Authenticated Player Summary Card */}
-              {cleanUid ? (
-                <div className="p-3.5 rounded-xl bg-gradient-to-br from-[#22160e] via-[#1a100a] to-[#120b06] border border-amber-500/50 space-y-2.5 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-400 to-amber-700 p-0.5 shadow">
-                        <div className="w-full h-full bg-[#18100a] rounded-[10px] flex items-center justify-center text-amber-300 font-black text-sm">
-                          {savedPlayerName ? savedPlayerName.charAt(0).toUpperCase() : 'P'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-black text-white leading-tight flex items-center gap-1.5">
-                          <span>{savedPlayerName || 'PUBG Player'}</span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        </div>
-                        <div className="text-[11px] text-amber-400 font-mono">
-                          UID: {cleanUid}
-                        </div>
+          {/* Player Profile & Active Reservations Section */}
+          <div className="space-y-3.5 animate-in fade-in duration-150">
+            {/* Authenticated Player Summary Card */}
+            {cleanUid ? (
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-[#22160e] via-[#1a100a] to-[#120b06] border border-amber-500/50 space-y-2.5 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-400 to-amber-700 p-0.5 shadow">
+                      <div className="w-full h-full bg-[#18100a] rounded-[10px] flex items-center justify-center text-amber-300 font-black text-sm">
+                        {savedPlayerName ? savedPlayerName.charAt(0).toUpperCase() : 'P'}
                       </div>
                     </div>
-
-                    <div className="text-right">
-                      <span className="text-[9px] text-amber-200/60 uppercase block leading-none font-medium">Balance</span>
-                      <span className="text-xs font-black text-amber-400 font-mono">{userBalance} 💎</span>
+                    <div>
+                      <div className="text-xs font-black text-white leading-tight flex items-center gap-1.5">
+                        <span>{savedPlayerName || 'PUBG Player'}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      </div>
+                      <div className="text-[10px] font-mono text-amber-300/80 mt-0.5">
+                        UID: <span className="text-amber-200 font-bold">{cleanUid}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1 border-t border-amber-900/40 text-xs">
-                    <button
-                      onClick={() => fetchMyBookings(true)}
-                      disabled={isLoadingBookings}
-                      className="py-1 px-2.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-semibold border border-amber-500/40 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${isLoadingBookings ? 'animate-spin' : ''}`} />
-                      <span>Sync Firebase</span>
-                    </button>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => {
-                          onClose();
-                          onEditPubgId();
-                        }}
-                        className="py-1 px-2 rounded-lg bg-[#22160d] hover:bg-[#2c1d12] text-amber-200/80 text-[11px] font-medium border border-amber-800/40 cursor-pointer"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          onClose();
-                          onClearPubgId();
-                        }}
-                        title="Logout"
-                        className="py-1 px-2 rounded-lg bg-[#19110b] hover:bg-red-950/80 text-amber-200/60 hover:text-red-300 text-[11px] font-medium border border-amber-800/30 cursor-pointer"
-                      >
-                        <LogOut className="w-3 h-3 text-red-400" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Unlinked User State */
-                <div className="p-4 rounded-xl bg-[#1c130c]/90 border border-amber-900/40 text-center space-y-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 mx-auto">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white uppercase font-heading">
-                      No Account Linked
-                    </h4>
-                    <p className="text-[11px] text-amber-200/60 leading-relaxed mt-1">
-                      Enter your PUBG ID, Name and 4-Digit Security PIN to see your booked squad seats and match credentials.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onEditPubgId();
-                    }}
-                    className="w-full py-2.5 rounded-xl pubg-amber-glow-btn text-white text-xs font-bold uppercase tracking-wider cursor-pointer shadow flex items-center justify-center gap-2"
-                  >
-                    <User className="w-3.5 h-3.5" />
-                    <span>Login / Set PUBG ID</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Live Reservations List */}
-              {cleanUid && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[11px] font-bold text-amber-300/80 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>Current Reservations ({bookings.length})</span>
+                  {/* Balance Display */}
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase tracking-wider text-amber-400/80 font-mono block">Balance</span>
+                    <span className="text-xs sm:text-sm font-black font-mono text-amber-300 flex items-center justify-end gap-1">
+                      {userBalance} 💎
                     </span>
+                  </div>
+                </div>
+
+                {/* Profile Controls */}
+                <div className="pt-2 border-t border-amber-900/40 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={fetchMyBookings}
+                    disabled={isLoadingBookings}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25180f] hover:bg-amber-950/60 border border-amber-800/40 text-[10px] font-bold text-amber-300 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingBookings ? 'animate-spin' : ''}`} />
+                    <span>Sync Firebase</span>
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => fetchMyBookings(true)}
-                      className="px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900/60 border border-amber-600/40 text-[10px] font-mono text-amber-300 cursor-pointer flex items-center gap-1"
-                      title="Refresh bookings from server"
+                      onClick={onEditPubgId}
+                      className="p-1.5 rounded-lg bg-[#25180f] hover:bg-amber-950/60 border border-amber-800/40 text-amber-300 hover:text-white transition-colors cursor-pointer"
+                      title="Edit Profile"
                     >
-                      <RefreshCw className={`w-3 h-3 ${isLoadingBookings ? 'animate-spin' : ''}`} />
-                      <span>Refresh</span>
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onClearPubgId}
+                      className="p-1.5 rounded-lg bg-[#25180f] hover:bg-red-950/60 border border-amber-800/40 hover:border-red-500/60 text-amber-400/70 hover:text-red-300 transition-colors cursor-pointer"
+                      title="Logout / Change UID"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-[#1a110a] border border-amber-800/40 text-center space-y-2">
+                <User className="w-8 h-8 text-amber-400/50 mx-auto" />
+                <p className="text-xs text-amber-200/80">
+                  Koi UID save nahi hai. Slot reserve karein ya profile set karein.
+                </p>
+                <button
+                  type="button"
+                  onClick={onEditPubgId}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs cursor-pointer shadow hover:bg-amber-400 transition-colors"
+                >
+                  Set Gaming Profile &amp; PIN
+                </button>
+              </div>
+            )}
 
-                  {isLoadingBookings ? (
-                    <div className="p-6 rounded-xl bg-[#120a06] border border-amber-900/30 text-center space-y-2 text-amber-200/70">
-                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-400" />
-                      <p className="text-xs">Fetching your reservations...</p>
+            {/* List of Booked Seats / Matches */}
+            {cleanUid && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-heading font-black text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Current Reservations ({bookings.length})</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={fetchMyBookings}
+                    className="text-[10px] text-amber-300/80 hover:text-amber-200 flex items-center gap-1 font-mono cursor-pointer"
+                  >
+                    <RefreshCw className={`w-2.5 h-2.5 ${isLoadingBookings ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                {isLoadingBookings ? (
+                  <div className="py-8 text-center text-amber-300/60 text-xs flex flex-col items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                    <span>Checking reservations on Firebase...</span>
+                  </div>
+                ) : bookings.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-[#150d07] border border-amber-900/40 text-center space-y-2">
+                    <Calendar className="w-7 h-7 text-amber-400/40 mx-auto" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-200">Aapki koi reservation nahi mili</p>
+                      <p className="text-[11px] text-amber-400/60 mt-0.5">
+                        UID: <span className="font-mono">{cleanUid}</span>
+                      </p>
                     </div>
-                  ) : bookingError ? (
-                    <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                      <span>{bookingError}</span>
-                    </div>
-                  ) : bookings.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-[#130b06] border border-amber-900/40 text-center space-y-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
-                        <Trophy className="w-4 h-4" />
-                      </div>
-                      <div className="text-xs text-slate-300">
-                        <p className="font-semibold">No active bookings found for this UID.</p>
-                        <p className="text-[11px] text-amber-400/60 mt-0.5">
-                          UID: <span className="font-mono">{cleanUid}</span>
-                        </p>
-                      </div>
-                      <button
-                        onClick={onClose}
-                        className="py-2 px-4 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold uppercase cursor-pointer"
+                    <button
+                      onClick={onClose}
+                      className="py-2 px-4 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold uppercase cursor-pointer"
+                    >
+                      Reserve a Squad Seat
+                    </button>
+                  </div>
+                ) : (
+                  /* Bookings Cards */
+                  <div className="space-y-3">
+                    {bookings.map((booking) => (
+                      <div 
+                        key={booking.id}
+                        className="p-3 rounded-xl bg-gradient-to-b from-[#1b120a] to-[#120a05] border border-amber-500/50 shadow-md space-y-2.5"
                       >
-                        Reserve a Squad Seat
-                      </button>
-                    </div>
-                  ) : (
-                    /* Bookings Cards */
-                    <div className="space-y-3">
-                      {bookings.map((booking) => (
-                        <div 
-                          key={booking.id}
-                          className="p-3 rounded-xl bg-gradient-to-b from-[#1b120a] to-[#120a05] border border-amber-500/50 shadow-md space-y-2.5"
-                        >
-                          {/* Header: Team & Seat on left, IGN and Match Time on right */}
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-xs font-heading font-black text-amber-300 uppercase">
-                              {booking.isCaptain && <span title="Captain" className="text-amber-400">👑</span>}
-                              <span>Team {booking.teamNumber}</span>
-                              <span className="text-amber-400/60">•</span>
-                              <span>Seat {booking.seatNumber}</span>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-xs">
-                              <span className="font-bold text-white tracking-wide">{booking.playerName}</span>
-                              <span className="text-[11px] text-amber-300 font-mono bg-black/60 px-2 py-0.5 rounded border border-amber-900/40">
-                                {booking.matchTime} PKT
-                              </span>
-                            </div>
+                        {/* Header: Team & Seat on left, IGN and Match Time on right */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-xs font-heading font-black text-amber-300 uppercase">
+                            {booking.isCaptain && <span title="Captain" className="text-amber-400">👑</span>}
+                            <span>Team {booking.teamNumber}</span>
+                            <span className="text-amber-400/60">•</span>
+                            <span>Seat {booking.seatNumber}</span>
                           </div>
 
-                          {/* Room Credentials (if unlocked) or Clean Locked notice */}
-                          {booking.isRoomUnlocked && booking.roomId ? (
-                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-900/40">
-                              {/* Room ID */}
-                              <div className="p-2 rounded-lg bg-black/70 border border-emerald-500/40 flex items-center justify-between">
-                                <div>
-                                  <span className="text-[9px] text-slate-400 uppercase font-mono block">Room ID</span>
-                                  <span className="text-sm font-black font-mono text-emerald-300">{booking.roomId}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => copyToClipboard(booking.roomId!, `room_${booking.id}`)}
-                                  className="p-1.5 rounded-md bg-[#22160d] text-amber-300 hover:text-white cursor-pointer"
-                                >
-                                  {copiedKey === `room_${booking.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                                </button>
-                              </div>
-
-                              {/* Room Password */}
-                              <div className="p-2 rounded-lg bg-black/70 border border-emerald-500/40 flex items-center justify-between">
-                                <div>
-                                  <span className="text-[9px] text-slate-400 uppercase font-mono block">Password</span>
-                                  <span className="text-sm font-black font-mono text-emerald-300">{booking.roomPassword}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => copyToClipboard(booking.roomPassword!, `pass_${booking.id}`)}
-                                  className="p-1.5 rounded-md bg-[#22160d] text-amber-300 hover:text-white cursor-pointer"
-                                >
-                                  {copiedKey === `pass_${booking.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="py-2 px-3 rounded-lg bg-black/50 border border-amber-900/40 text-[11px] text-amber-200/80 flex items-center gap-2">
-                              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                              <span>Room ID &amp; Password unlock 15 minutes before match</span>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-bold text-white tracking-wide">{booking.playerName}</span>
+                            <span className="text-[11px] text-amber-300 font-mono bg-black/60 px-2 py-0.5 rounded border border-amber-900/40">
+                              {booking.matchTime} PKT
+                            </span>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* TAB 2: RULES & SUPPORT (The 4 Clean Accordion Sections) */}
-          {activeTab === 'rules' && (
-            <div className="space-y-2.5 animate-in fade-in duration-150">
-              {/* Quick Action Button */}
-              <div className="mb-3">
-                <button
-                  onClick={() => { onClose(); onOpenResults(); }}
-                  className="w-full flex items-center justify-center gap-1.5 p-2 rounded-xl bg-[#1c130c] hover:bg-[#251a10] border border-amber-900/40 text-amber-200 hover:text-white text-[11px] font-semibold transition-colors cursor-pointer text-center"
-                >
-                  <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Leaderboard</span>
-                </button>
-              </div>
+                        {/* Room Credentials (if unlocked) or Clean Locked notice */}
+                        {booking.isRoomUnlocked && booking.roomId ? (
+                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-900/40">
+                            {/* Room ID */}
+                            <div className="p-2 rounded-lg bg-black/70 border border-emerald-500/40 flex items-center justify-between">
+                              <div>
+                                <span className="text-[9px] text-slate-400 uppercase font-mono block">Room ID</span>
+                                <span className="text-sm font-black font-mono text-emerald-300">{booking.roomId}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(booking.roomId!, `room_${booking.id}`)}
+                                className="p-1.5 rounded-md bg-[#22160d] text-amber-300 hover:text-white cursor-pointer"
+                              >
+                                {copiedKey === `room_${booking.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
 
-              {/* SECTION 1: STRONG TERMS & CONDITIONS */}
-              <div className="rounded-xl border border-amber-600/40 bg-[#170f09]/90 overflow-hidden shadow">
-                <button
-                  onClick={() => toggleSection('terms')}
-                  className="w-full p-3 flex items-center justify-between text-left hover:bg-amber-950/30 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                      <FileText className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-heading font-black tracking-wide text-white uppercase">
-                      Strong Terms &amp; Conditions
-                    </span>
-                  </div>
-                  {openSection === 'terms' ? (
-                    <ChevronUp className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-amber-400/70" />
-                  )}
-                </button>
-
-                {openSection === 'terms' && (
-                  <div className="p-3 pt-0 border-t border-amber-900/30 space-y-2.5 text-[11px] text-amber-100/90 leading-relaxed animate-in fade-in duration-200">
-                    <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-500/40 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold text-red-300 block uppercase text-[10px] tracking-wider">
-                          15 Minute Room Joining Window (Strict)
-                        </span>
-                        <span>
-                          Match shuru hone se theek 15 minute pehle Room ID &amp; Password unlock hoga. Tamam players ko <b>15 minute ke andar room mein enter hona lazmi hai</b>. Late hone ya match miss hone par <b>fees 100% NON-REFUNDABLE</b> hogi.
-                        </span>
+                            {/* Room Password */}
+                            <div className="p-2 rounded-lg bg-black/70 border border-emerald-500/40 flex items-center justify-between">
+                              <div>
+                                <span className="text-[9px] text-slate-400 uppercase font-mono block">Password</span>
+                                <span className="text-sm font-black font-mono text-emerald-300">{booking.roomPassword}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(booking.roomPassword!, `pass_${booking.id}`)}
+                                className="p-1.5 rounded-md bg-[#22160d] text-amber-300 hover:text-white cursor-pointer"
+                              >
+                                {copiedKey === `pass_${booking.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="py-2 px-3 rounded-lg bg-black/50 border border-amber-900/40 text-[11px] text-amber-200/80 flex items-center gap-2">
+                            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>Room ID &amp; Password unlock 15 minutes before match</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="space-y-1.5 pl-1">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                        <span><b>Fair Play &amp; Anti-Cheat:</b> Emulators, iPads, triggers, hacks, config files, ya teaming sakht mana hai. Khilaf-warzi par UID permanent ban aur prize seize ho jayega.</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                        <span><b>Exact Seat Allocation:</b> Har player ko uski booked Team aur Seat number par hi baithna hoga. Ghalat slot par baithne par room se kick kar diya jayega.</span>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>
-
-              {/* SECTION 2: PRIVACY & ACCOUNT POLICY */}
-              <div className="rounded-xl border border-amber-800/40 bg-[#170f09]/90 overflow-hidden shadow">
-                <button
-                  onClick={() => toggleSection('privacy')}
-                  className="w-full p-3 flex items-center justify-between text-left hover:bg-amber-950/30 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-heading font-black tracking-wide text-white uppercase">
-                      Privacy &amp; Account Policy
-                    </span>
-                  </div>
-                  {openSection === 'privacy' ? (
-                    <ChevronUp className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-amber-400/70" />
-                  )}
-                </button>
-
-                {openSection === 'privacy' && (
-                  <div className="p-3 pt-0 border-t border-amber-900/30 space-y-2 text-[11px] text-amber-100/90 leading-relaxed animate-in fade-in duration-200">
-                    <p>
-                      Aapka PUBG UID aur 4-digit security PIN sirf aapke wallet balance aur seat reservations ki verification ke liye Firebase Realtime Database mein mehfooz rakha jata hai.
-                    </p>
-                    <p>
-                      Hum kisi teesray idaray ko aapka data share nahi karte. Har booking cryptographic hash ke sath verify hoti hai.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 3: OFFICIAL CONTACT & PAYMENT ACCOUNTS */}
-              <div className="rounded-xl border border-amber-800/40 bg-[#170f09]/90 overflow-hidden shadow">
-                <button
-                  onClick={() => toggleSection('contact')}
-                  className="w-full p-3 flex items-center justify-between text-left hover:bg-amber-950/30 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                      <Phone className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-heading font-black tracking-wide text-white uppercase">
-                      Official Admin Contact &amp; Accounts
-                    </span>
-                  </div>
-                  {openSection === 'contact' ? (
-                    <ChevronUp className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-amber-400/70" />
-                  )}
-                </button>
-
-                {openSection === 'contact' && (
-                  <div className="p-3 pt-0 border-t border-amber-900/30 space-y-2.5 text-[11px] text-amber-100/90 leading-relaxed animate-in fade-in duration-200">
-                    <div className="p-2.5 rounded-lg bg-[#0e0703] border border-amber-800/40 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-amber-400 uppercase font-mono">Easypaisa &amp; JazzCash</span>
-                        <span className="text-emerald-400 text-[10px] font-bold">Muhammad Nadir</span>
-                      </div>
-                      <div className="text-sm font-black font-mono text-white">03052838367</div>
-                    </div>
-
-                    <a
-                      href="https://wa.me/923052838367"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                      <span>WhatsApp Support (03052838367)</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 4: FREQUENTLY ASKED QUESTIONS (FAQ) */}
-              <div className="rounded-xl border border-amber-800/40 bg-[#170f09]/90 overflow-hidden shadow">
-                <button
-                  onClick={() => toggleSection('faq')}
-                  className="w-full p-3 flex items-center justify-between text-left hover:bg-amber-950/30 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                      <HelpCircle className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-heading font-black tracking-wide text-white uppercase">
-                      FAQ &amp; How It Works
-                    </span>
-                  </div>
-                  {openSection === 'faq' ? (
-                    <ChevronUp className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-amber-400/70" />
-                  )}
-                </button>
-
-                {openSection === 'faq' && (
-                  <div className="p-3 pt-0 border-t border-amber-900/30 space-y-2 text-[11px] text-amber-100/90 leading-relaxed animate-in fade-in duration-200">
-                    <div>
-                      <p className="font-bold text-amber-300">1. Room ID aur Password kab milega?</p>
-                      <p className="text-amber-200/70">Match time se theek 15 minute pehle 'My Bookings' tab aur ہوم اسکرین پر Room credentials unlock ho jayenge.</p>
-                    </div>
-                    <div>
-                      <p className="font-bold text-amber-300">2. Balance kaisay add karein?</p>
-                      <p className="text-amber-200/70">Recharge button dabayein, portal par payment verify karein, diamonds foran aapke account mein add ho jayenge.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* 5. Footer & Discreet Admin Icon */}
-        <div className="pt-3 border-t border-amber-950/50 flex items-center justify-between text-[11px] text-amber-300/60">
+        {/* Bottom Footer & Discreet Admin Icon */}
+        <div className="pt-3 mt-4 border-t border-amber-950/50 flex items-center justify-between text-[11px] text-amber-300/60">
           <span className="font-mono text-[10px] text-amber-400/50">Squard War © 2026</span>
           <button
             type="button"
