@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Flame, Plus, ShieldCheck, User, Trophy } from 'lucide-react';
+import { Menu, Flame, Plus, ShieldCheck, User } from 'lucide-react';
 import { GameType } from '../types/tournament';
 
 interface HeaderProps {
@@ -26,8 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDeposit,
   onOpenAdmin,
   isAdminLoggedIn,
-  onEditPubgId,
-  onOpenBookings
+  onEditPubgId
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0d0906]/95 backdrop-blur-md border-b border-amber-900/30 px-3 sm:px-6 py-2.5">
@@ -72,20 +71,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Right: Actions (My Bookings, Account, Diamond Balance) */}
+        {/* Right: Actions (Account, Diamond Balance) */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* 1. My Bookings Button */}
-          {savedPubgId && (
-            <button
-              type="button"
-              onClick={onOpenBookings}
-              title="View My Booked Seats & Room Access"
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 rounded-xl text-xs font-bold text-amber-300 transition-colors cursor-pointer"
-            >
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>My Bookings</span>
-            </button>
-          )}
 
           {/* 3. Player Username & ID Badge */}
           {savedPubgId ? (

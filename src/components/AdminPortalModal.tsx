@@ -30,7 +30,9 @@ import {
   CheckCircle,
   XCircle,
   Banknote,
-  DollarSign
+  DollarSign,
+  Eye,
+  TrendingUp
 } from 'lucide-react';
 import { Tournament, TournamentStatus, Seat, CashOutRequest, CashOutStatus } from '../types/tournament';
 
@@ -220,6 +222,54 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       setIsLoadingCashouts(false);
     }
   }, [adminToken]);
+
+  // Visitor Traffic & Serial Counter State (Today & Lifetime Visitors)
+  const [visitorStats, setVisitorStats] = useState<{
+    today: number;
+    lifetime: number;
+    todayDate: string;
+    lastUpdated?: number;
+  }>({
+    today: 0,
+    lifetime: 0,
+    todayDate: getTodayKarachiDate()
+  });
+  const [isLoadingVisitors, setIsLoadingVisitors] = useState<boolean>(false);
+
+  const fetchVisitorStats = useCallback(async () => {
+    setIsLoadingVisitors(true);
+    try {
+      const res = await fetch('/api/admin/visitors/stats');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success) {
+          setVisitorStats({
+            today: data.today || 0,
+            lifetime: data.lifetime || 0,
+            todayDate: data.todayDate || getTodayKarachiDate(),
+            lastUpdated: Date.now()
+          });
+          return;
+        }
+      }
+      // Direct Firebase RTDB fallback
+      const fbRes = await fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/visitor_stats.json');
+      if (fbRes.ok) {
+        const fbData = await fbRes.json();
+        const todayStr = getTodayKarachiDate();
+        setVisitorStats({
+          today: (fbData?.daily && fbData?.daily[todayStr]) || 0,
+          lifetime: fbData?.lifetime || 0,
+          todayDate: todayStr,
+          lastUpdated: Date.now()
+        });
+      }
+    } catch (err) {
+      console.warn('Error fetching visitor stats:', err);
+    } finally {
+      setIsLoadingVisitors(false);
+    }
+  }, []);
 
   // Handle Approve, Cancel/Reject, or Mark Paid for Cashout Request
   const handleCashoutAction = async (
@@ -442,6 +492,15 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       fetchCashouts();
     }
   }, [isOpen, adminToken, activeTab, fetchCashouts]);
+
+  // Fetch visitor statistics when admin opens panel and every 30s
+  useEffect(() => {
+    if (isOpen && adminToken) {
+      fetchVisitorStats();
+      const interval = setInterval(fetchVisitorStats, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isOpen, adminToken, fetchVisitorStats]);
 
   // Load active notice on mount
   useEffect(() => {
@@ -1036,6 +1095,91 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         ) : (
           /* LOGGED IN ADMIN PANEL (2 CLEAN SECTIONS) */
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+            {/* 0. WEBSITE VISITOR TRAFFIC & SERIAL COUNTER (Today & Lifetime Visitors) */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#1f130a] via-[#170e07] to-[#120803] border-2 border-amber-500/60 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-32 bg-amber-500/10 blur-3xl pointer-events-none" />
+              
+              <div className="relative z-10">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-900/40">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-500 to-amber-700 flex items-center justify-center text-black font-black shadow-lg shadow-amber-500/30">
+                      <Eye className="w-5 h-5 text-black" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-heading font-black text-sm sm:text-base uppercase tracking-wide text-white">
+                          Website Visitor Counter
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Live Serial Count
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-200/70 mt-0.5">
+                        Home page par anay walay tamam users ka automated serial count (Backend &amp; Firebase RTDB synced)
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={fetchVisitorStats}
+                    disabled={isLoadingVisitors}
+                    className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#25180f] hover:bg-amber-950/80 border border-amber-600/50 hover:border-amber-400 text-xs font-bold text-amber-300 transition-all cursor-pointer shadow active:scale-95"
+                    title="Refresh Live Visitor Stats"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isLoadingVisitors ? 'animate-spin' : ''}`} />
+                    <span>Sync Counter</span>
+                  </button>
+                </div>
+
+                {/* 2 Big Stat Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-3.5">
+                  {/* Metric 1: Today's Visitors */}
+                  <div className="p-4 rounded-xl bg-[#0e0704]/90 border border-emerald-500/40 shadow-inner flex items-center justify-between relative group hover:border-emerald-400/70 transition-colors">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-400 font-heading">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        <span>Today Users (Aaj Ke)</span>
+                      </div>
+                      <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight mt-1 flex items-baseline gap-1.5">
+                        <span className="text-emerald-400">{visitorStats.today}</span>
+                        <span className="text-xs font-bold font-sans text-emerald-300/70">Users</span>
+                      </div>
+                      <div className="text-[10px] text-amber-300/60 font-mono mt-1">
+                        Date: {visitorStats.todayDate} (PKT)
+                      </div>
+                    </div>
+
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  {/* Metric 2: Lifetime Visitors */}
+                  <div className="p-4 rounded-xl bg-[#0e0704]/90 border border-amber-500/50 shadow-inner flex items-center justify-between relative group hover:border-amber-400 transition-colors">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-400 font-heading">
+                        <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Life Time Users (Total)</span>
+                      </div>
+                      <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight mt-1 flex items-baseline gap-1.5">
+                        <span className="text-amber-400">{visitorStats.lifetime}</span>
+                        <span className="text-xs font-bold font-sans text-amber-300/70">Total</span>
+                      </div>
+                      <div className="text-[10px] text-amber-300/60 font-mono mt-1">
+                        All-time cumulative website visits
+                      </div>
+                    </div>
+
+                    <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-300 shadow-md">
+                      <Users className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* 5 Navigation Tabs */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 bg-[#100a06] border border-amber-900/40 rounded-xl">
               <button

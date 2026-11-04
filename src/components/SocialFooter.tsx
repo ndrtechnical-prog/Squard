@@ -300,16 +300,10 @@ export const SocialFooter: React.FC = () => {
       <footer className="w-full mt-6 bg-[#0f0b08] border-t border-[#251b14] text-[#9aa0a6] font-sans antialiased relative z-10 select-none">
         
         {/* Top Location Bar (Google Mobile "Pakistan" style) */}
-        <div className="max-w-4xl mx-auto px-4 py-2.5 sm:py-3 border-b border-[#211710] flex items-center justify-between text-xs sm:text-[13px] text-amber-200/60 font-medium">
+        <div className="max-w-4xl mx-auto px-4 py-2.5 sm:py-3 border-b border-[#211710] flex items-center text-xs sm:text-[13px] text-amber-200/60 font-medium">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
             <span className="text-amber-100 font-semibold tracking-wide">Pakistan</span>
-            <span className="text-amber-200/30">•</span>
-            <span className="text-amber-200/60 text-[11px] sm:text-xs">Squard War Esports</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-[11px] font-mono text-amber-400/70">
-            <span>squardwar.site</span>
           </div>
         </div>
 
@@ -361,14 +355,6 @@ export const SocialFooter: React.FC = () => {
             <span className="text-amber-200/25">•</span>
             <button
               type="button"
-              onClick={(e) => openTopic('fairplay', e)}
-              className="hover:text-amber-100 hover:underline underline-offset-4 decoration-amber-500/40 transition-colors cursor-pointer"
-            >
-              Fair Play Rules
-            </button>
-            <span className="text-amber-200/25">•</span>
-            <button
-              type="button"
               onClick={(e) => openTopic('refund', e)}
               className="hover:text-amber-100 hover:underline underline-offset-4 decoration-amber-500/40 transition-colors cursor-pointer"
             >
@@ -384,7 +370,7 @@ export const SocialFooter: React.FC = () => {
             </button>
           </div>
 
-          {/* LINE 3: FAQ & Support Line */}
+          {/* LINE 3: FAQ & About Line */}
           <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 gap-y-1.5 text-[11.5px] sm:text-[12.5px] text-amber-200/65">
             <button
               type="button"
@@ -393,31 +379,6 @@ export const SocialFooter: React.FC = () => {
             >
               FAQ
             </button>
-            <span className="text-amber-200/25">•</span>
-            <button
-              type="button"
-              onClick={(e) => openTopic('howto', e)}
-              className="hover:text-amber-100 hover:underline underline-offset-4 decoration-amber-500/40 transition-colors cursor-pointer"
-            >
-              How to Join
-            </button>
-            <span className="text-amber-200/25">•</span>
-            <button
-              type="button"
-              onClick={(e) => openTopic('timing', e)}
-              className="hover:text-amber-100 hover:underline underline-offset-4 decoration-amber-500/40 transition-colors cursor-pointer"
-            >
-              Room Timings
-            </button>
-            <span className="text-amber-200/25">•</span>
-            <a
-              href="https://wa.me/923158812124"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-emerald-300 hover:underline underline-offset-4 decoration-emerald-500/40 transition-colors cursor-pointer inline-flex items-center gap-1 text-emerald-400"
-            >
-              <span>Support (03158812124)</span>
-            </a>
             <span className="text-amber-200/25">•</span>
             <button
               type="button"
@@ -527,7 +488,7 @@ export const SocialFooter: React.FC = () => {
 
             {/* Modal Quick Switch Tabs (Topic Selector) */}
             <div className="px-4 py-2.5 bg-[#0a0503] border-t border-amber-950/60 flex items-center gap-2 overflow-x-auto text-[10.5px] font-medium no-scrollbar">
-              {(['privacy', 'terms', 'fairplay', 'refund', 'faq', 'howto'] as PolicyTopic[]).map((tid) => (
+              {(['privacy', 'terms', 'refund', 'payment', 'faq', 'about'] as PolicyTopic[]).map((tid) => (
                 <button
                   key={tid}
                   type="button"

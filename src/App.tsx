@@ -189,6 +189,34 @@ export default function App() {
     fetchActiveNotice();
   }, [fetchActiveNotice]);
 
+  // Serial Visitor Counter: Tracks each visitor landing on the website home screen
+  useEffect(() => {
+    try {
+      const alreadyTracked = sessionStorage.getItem('sw_visit_counted');
+      if (!alreadyTracked) {
+        sessionStorage.setItem('sw_visit_counted', 'true');
+        fetch('/api/visitors/track', { method: 'POST' }).catch(() => {
+          // Fallback direct Firebase RTDB sync
+          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+          fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/visitor_stats.json')
+            .then(res => res.json())
+            .then(data => {
+              const currentLifetime = ((data && typeof data.lifetime === 'number') ? data.lifetime : 100) + 1;
+              const currentToday = (((data && data.daily && data.daily[today])) || 0) + 1;
+              fetch('https://pubg-matches-43fa1-default-rtdb.firebaseio.com/visitor_stats/lifetime.json', {
+                method: 'PUT',
+                body: JSON.stringify(currentLifetime)
+              }).catch(() => {});
+              fetch(`https://pubg-matches-43fa1-default-rtdb.firebaseio.com/visitor_stats/daily/${today}.json`, {
+                method: 'PUT',
+                body: JSON.stringify(currentToday)
+              }).catch(() => {});
+            }).catch(() => {});
+        });
+      }
+    } catch {}
+  }, []);
+
   // Open modal with history push so Back button cleanly closes it
   const openWithHistory = useCallback((openFn: () => void) => {
     try {
@@ -1170,7 +1198,6 @@ export default function App() {
         onOpenAdmin={() => openWithHistory(() => setIsAdminOpen(true))}
         isAdminLoggedIn={Boolean(adminToken)}
         onEditPubgId={handleEditPubgId}
-        onOpenBookings={() => openWithHistory(() => setIsDrawerOpen(true))}
       />
 
       {/* Floating Welcome / Auth Notification */}

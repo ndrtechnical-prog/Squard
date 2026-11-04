@@ -2315,6 +2315,119 @@ app.get('/api/results', (req: Request, res: Response) => {
 });
 
 // ==========================================
+// VISITOR TRACKING & SERIAL COUNTER (HOME SCREEN)
+// ==========================================
+
+function getKarachiDateStr(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Asia/Karachi', 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    }).format(new Date());
+  } catch {
+    const d = new Date(Date.now() + 5 * 3600 * 1000);
+    return d.toISOString().split('T')[0];
+  }
+}
+
+// In-memory visitor cache for super-fast responses + Firebase sync
+let visitorStatsCache = {
+  lifetime: 100,
+  daily: {} as Record<string, number>,
+  lastUpdated: 0
+};
+
+async function getOrFetchVisitorStats(): Promise<{ lifetime: number; daily: Record<string, number> }> {
+  if (Date.now() - visitorStatsCache.lastUpdated < 10000 && visitorStatsCache.lastUpdated > 0) {
+    return visitorStatsCache;
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`${FIREBASE_DB_URL}/visitor_stats.json`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        const lf = typeof data.lifetime === 'number' ? data.lifetime : (parseInt(data.lifetime, 10) || 100);
+        visitorStatsCache.lifetime = Math.max(lf, visitorStatsCache.lifetime || 0);
+        visitorStatsCache.daily = data.daily && typeof data.daily === 'object' ? { ...data.daily } : (visitorStatsCache.daily || {});
+        visitorStatsCache.lastUpdated = Date.now();
+      }
+    }
+  } catch (err) {
+    console.warn('Visitor stats Firebase fetch notice:', err);
+  }
+  return visitorStatsCache;
+}
+
+// 6b. Track visitor increment on homepage visit (serial count)
+app.post('/api/visitors/track', async (_req: Request, res: Response) => {
+  const today = getKarachiDateStr();
+  try {
+    const stats = await getOrFetchVisitorStats();
+    stats.lifetime = (stats.lifetime || 0) + 1;
+    stats.daily[today] = ((stats.daily[today] || 0) + 1);
+    visitorStatsCache.lastUpdated = Date.now();
+
+    // Persist to Firebase RTDB in background
+    fetch(`${FIREBASE_DB_URL}/visitor_stats.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lifetime: stats.lifetime,
+        daily: stats.daily,
+        lastVisit: Date.now(),
+        lastVisitDate: today
+      })
+    }).catch(() => {});
+
+    return res.json({
+      success: true,
+      today: stats.daily[today] || 1,
+      lifetime: stats.lifetime,
+      todayDate: today
+    });
+  } catch {
+    visitorStatsCache.lifetime = (visitorStatsCache.lifetime || 0) + 1;
+    visitorStatsCache.daily[today] = (visitorStatsCache.daily[today] || 0) + 1;
+    return res.json({
+      success: true,
+      today: visitorStatsCache.daily[today] || 1,
+      lifetime: visitorStatsCache.lifetime,
+      todayDate: today
+    });
+  }
+});
+
+// 6c. Get visitor statistics (For Admin Section & Realtime Monitoring)
+app.get('/api/admin/visitors/stats', async (_req: Request, res: Response) => {
+  const today = getKarachiDateStr();
+  try {
+    const stats = await getOrFetchVisitorStats();
+    const todayCount = stats.daily?.[today] || 0;
+    const lifetimeCount = stats.lifetime || 0;
+
+    return res.json({
+      success: true,
+      today: todayCount,
+      lifetime: lifetimeCount,
+      todayDate: today,
+      lastUpdated: visitorStatsCache.lastUpdated || Date.now()
+    });
+  } catch {
+    return res.json({
+      success: true,
+      today: visitorStatsCache.daily?.[today] || 0,
+      lifetime: visitorStatsCache.lifetime || 0,
+      todayDate: today
+    });
+  }
+});
+
+// ==========================================
 // ADMIN API ROUTES (SECURED)
 // ==========================================
 
