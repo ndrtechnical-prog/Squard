@@ -16,6 +16,8 @@ import { TournamentFeaturesModal, FeatureTab } from './components/TournamentFeat
 import { NoticeBanner, NoticeData } from './components/NoticeBanner';
 import { NoticesModal } from './components/NoticesModal';
 import { SocialFooter } from './components/SocialFooter';
+import { SeoLandingPage } from './components/SeoLandingPage';
+import { SEO_LANDING_PAGES } from './data/seoLandingPages';
 import { Tournament, TournamentStatus, GameType, PaymentAccount, PubgMatchId } from './types/tournament';
 import { 
   loadStoredTournament, 
@@ -35,6 +37,34 @@ import { Sparkles, ArrowLeft } from 'lucide-react';
 export default function App() {
   const [activeGame, setActiveGame] = useState<GameType>('PUBG');
   const [selectedMatch, setSelectedMatch] = useState<PubgMatchId | 'FREE_FIRE' | null>(null);
+
+  // Active client-side path for SEO landing pages & smooth in-app navigation
+  const [currentPath, setCurrentPath] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname || '/';
+    }
+    return '/';
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname || '/');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateTo = useCallback((targetPath: string) => {
+    const cleanPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
+    try {
+      window.history.pushState({}, '', cleanPath);
+    } catch {}
+    setCurrentPath(cleanPath);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const currentSlug = currentPath.replace(/^\//, '').split('?')[0].split('#')[0];
+  const activeSeoPage = SEO_LANDING_PAGES[currentSlug] || null;
   
   // Independent tournament states for each match
   const [erangelTournament, setErangelTournament] = useState<Tournament>(() => {
@@ -1192,6 +1222,7 @@ export default function App() {
         onSelectGame={(g) => {
           setActiveGame(g);
           setSelectedMatch(null);
+          if (activeSeoPage) navigateTo('/');
         }}
         onOpenMenu={() => openWithHistory(() => setIsDrawerOpen(true))}
         onOpenDeposit={handleOpenDeposit}
@@ -1210,98 +1241,121 @@ export default function App() {
 
       {/* 2. MAIN VIEWPORT */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-6 sm:pb-8">
-        {/* 3 ICON BUTTONS IN EASYPAISA STYLE:
-            PUBG: REWARD · NOTICES · REVIEWS
-            FREE FIRE: REWARD · CASHOUT · REVIEWS */}
-        <SeatCounters
-          activeGame={activeGame}
-          onOpenReward={() => handleOpenFeature('REWARD')}
-          onOpenCashout={() => handleOpenFeature('CASHOUT')}
-          onOpenNotices={() => openWithHistory(() => setIsNoticesModalOpen(true))}
-          onOpenReviews={() => handleOpenFeature('REVIEWS')}
-        />
-
-        {/* =========================================================================
-            SCREEN 1: MATCH SELECTION HUB (Images + Full Join Buttons)
-            Shown by default when no match is opened yet
-           ========================================================================= */}
-        {!selectedMatch ? (
-          <MatchListSection
-            activeGame={activeGame}
+        {activeSeoPage ? (
+          <SeoLandingPage
+            pageData={activeSeoPage}
+            onNavigate={navigateTo}
+            activeTournament={tournament}
             erangelTournament={erangelTournament}
             livikTournament={livikTournament}
             tdmTournament={tdmTournament}
             freeFireTournament={freeFireTournament}
-            onSelectPubgMatch={(matchId) => {
-              setSelectedMatch(matchId);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onSelectFreeFire={() => {
-              setSelectedMatch('FREE_FIRE');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+            onSelectMatch={(matchId) => {
+              if (matchId === 'FREE_FIRE') {
+                setActiveGame('FREE_FIRE');
+                setSelectedMatch('FREE_FIRE');
+              } else {
+                setActiveGame('PUBG');
+                setSelectedMatch(matchId as PubgMatchId);
+              }
+              navigateTo('/');
             }}
           />
         ) : (
-          /* =========================================================================
-              SCREEN 2: DEDICATED SEAT RESERVATION VIEW FOR SELECTED MATCH
-             ========================================================================= */
-          <div className="space-y-4 animate-in fade-in-50 duration-200">
-            {/* Top Navigation: Back to Matches Button */}
-            <div className="flex items-center">
-              <button
-                type="button"
-                onClick={() => setSelectedMatch(null)}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 text-amber-300 font-heading font-black text-xs uppercase tracking-wider border border-amber-500/50 transition-all cursor-pointer shadow active:scale-95"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Matches</span>
-              </button>
-            </div>
-
-            {/* HERO BANNER WITH SELECTED MATCH POSTER & COUNTDOWN */}
-            <HeroBanner
-              tournament={tournament}
+          <>
+            {/* 3 ICON BUTTONS IN EASYPAISA STYLE:
+                PUBG: REWARD · NOTICES · REVIEWS
+                FREE FIRE: REWARD · CASHOUT · REVIEWS */}
+            <SeatCounters
               activeGame={activeGame}
-              customBannerImage={
-                selectedMatch === 'ERANGEL' 
-                  ? MATCH_IMAGES.ERANGEL 
-                  : selectedMatch === 'LIVIK' 
-                    ? MATCH_IMAGES.LIVIK 
-                    : selectedMatch === 'TDM' 
-                      ? MATCH_IMAGES.TDM 
-                      : (activeGame === 'FREE_FIRE' ? MATCH_IMAGES.FREE_FIRE : undefined)
-              }
-              onQuickJoin={handleQuickJoin}
+              onOpenReward={() => handleOpenFeature('REWARD')}
+              onOpenCashout={() => handleOpenFeature('CASHOUT')}
+              onOpenNotices={() => openWithHistory(() => setIsNoticesModalOpen(true))}
+              onOpenReviews={() => handleOpenFeature('REVIEWS')}
             />
 
-            {/* ROOM CREDENTIALS / TIMELINE LIFECYCLE BAR */}
-            <RoomAccessAlert
-              tournament={tournament}
-              onOpenResults={() => openWithHistory(() => setIsResultsOpen(true))}
-            />
+            {/* =========================================================================
+                SCREEN 1: MATCH SELECTION HUB (Images + Full Join Buttons)
+                Shown by default when no match is opened yet
+               ========================================================================= */}
+            {!selectedMatch ? (
+              <MatchListSection
+                activeGame={activeGame}
+                erangelTournament={erangelTournament}
+                livikTournament={livikTournament}
+                tdmTournament={tdmTournament}
+                freeFireTournament={freeFireTournament}
+                onSelectPubgMatch={(matchId) => {
+                  setSelectedMatch(matchId);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onSelectFreeFire={() => {
+                  setSelectedMatch('FREE_FIRE');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            ) : (
+              /* =========================================================================
+                  SCREEN 2: DEDICATED SEAT RESERVATION VIEW FOR SELECTED MATCH
+                 ========================================================================= */
+              <div className="space-y-4 animate-in fade-in-50 duration-200">
+                {/* Top Navigation: Back to Matches Button */}
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMatch(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 text-amber-300 font-heading font-black text-xs uppercase tracking-wider border border-amber-500/50 transition-all cursor-pointer shadow active:scale-95"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Back to Matches</span>
+                  </button>
+                </div>
 
-            {/* SEAT RESERVATION SECTION FOR ACTIVE MATCH */}
-            <div className="mt-4 mb-8">
+                {/* HERO BANNER WITH SELECTED MATCH POSTER & COUNTDOWN */}
+                <HeroBanner
+                  tournament={tournament}
+                  activeGame={activeGame}
+                  customBannerImage={
+                    selectedMatch === 'ERANGEL' 
+                      ? MATCH_IMAGES.ERANGEL 
+                      : selectedMatch === 'LIVIK' 
+                        ? MATCH_IMAGES.LIVIK 
+                        : selectedMatch === 'TDM' 
+                          ? MATCH_IMAGES.TDM 
+                          : (activeGame === 'FREE_FIRE' ? MATCH_IMAGES.FREE_FIRE : undefined)
+                  }
+                  onQuickJoin={handleQuickJoin}
+                />
 
-              {/* Grid of Teams */}
-              <div className={`grid ${selectedMatch === 'TDM' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-4`}>
-                {tournament.teams.map((team) => (
-                  <TeamCard
-                    key={team.id}
-                    team={team}
-                    onJoinSeat={handleJoinSeat}
-                    activeGame={activeGame}
-                    isTdm={selectedMatch === 'TDM'}
-                  />
-                ))}
+                {/* ROOM CREDENTIALS / TIMELINE LIFECYCLE BAR */}
+                <RoomAccessAlert
+                  tournament={tournament}
+                  onOpenResults={() => openWithHistory(() => setIsResultsOpen(true))}
+                />
+
+                {/* SEAT RESERVATION SECTION FOR ACTIVE MATCH */}
+                <div className="mt-4 mb-8">
+                  {/* Grid of Teams */}
+                  <div className={`grid ${selectedMatch === 'TDM' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-4`}>
+                    {tournament.teams.map((team) => (
+                      <TeamCard
+                        key={team.id}
+                        team={team}
+                        onJoinSeat={handleJoinSeat}
+                        activeGame={activeGame}
+                        isTdm={selectedMatch === 'TDM'}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
       </main>
 
       {/* 3. FOOTER (Google-style Minimal 3-Line Section) */}
-      <SocialFooter />
+      <SocialFooter onNavigate={navigateTo} />
 
       {/* 4. MODALS */}
       {/* Simple Seat Booking Modal with [-] 1 [+] and dynamic PUBG ID boxes */}

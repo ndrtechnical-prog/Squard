@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import { SEO_LANDING_PAGES } from './src/data/seoLandingPages.ts';
 import type { 
   Tournament, 
   Booking, 
@@ -748,7 +750,7 @@ const evaluateTournamentStatus = () => {
 // ==========================================
 
 // SEO: Dynamic XML Sitemap matching the requesting host
-// Prevents Google Search Console "URL not allowed" errors by ensuring the loc matches the exact property
+// Returns all 11 verified indexable URLs for Google Search Console
 app.get('/sitemap.xml', (req: Request, res: Response) => {
   const reqHost = (req.get('host') || 'squardwar.site').toLowerCase();
   const domain = reqHost.includes('squadwar.site') && !reqHost.includes('squardwar.site')
@@ -757,16 +759,32 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
   
   const today = new Date().toISOString().split('T')[0];
 
+  const sitemapUrls = [
+    { loc: `${domain}/`, priority: '1.0', changefreq: 'hourly' },
+    { loc: `${domain}/pubg-tournament-pakistan`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${domain}/pubg-mobile-online-tournaments`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${domain}/pubg-custom-room-matches`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${domain}/pubg-squad-tournaments`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${domain}/pubg-kill-reward-matches`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${domain}/free-fire-tournaments`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${domain}/upcoming-pubg-tournaments`, priority: '0.9', changefreq: 'hourly' },
+    { loc: `${domain}/pubg-tournament-results`, priority: '0.8', changefreq: 'daily' },
+    { loc: `${domain}/how-to-join-pubg-tournaments`, priority: '0.8', changefreq: 'weekly' },
+    { loc: `${domain}/pubg-tournament-rules`, priority: '0.8', changefreq: 'weekly' }
+  ];
+
+  const urlEntriesXml = sitemapUrls.map(item => `  <url>
+    <loc>${item.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${item.changefreq}</changefreq>
+    <priority>${item.priority}</priority>
+  </url>`).join('\n');
+
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${domain}/</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>hourly</changefreq>
-    <priority>1.0</priority>
-  </url>
+${urlEntriesXml}
 </urlset>`);
 });
 
@@ -3800,8 +3818,59 @@ async function startServer() {
       },
       appType: 'spa'
     });
+
+    // Register SSR meta injection for all 10 SEO Landing Pages in development
+    for (const [slug, pageData] of Object.entries(SEO_LANDING_PAGES)) {
+      const routePath = `/${slug}`;
+      app.get(routePath, async (req: Request, res: Response, next: NextFunction) => {
+        try {
+          const rawTemplate = await fs.promises.readFile(path.resolve(__dirname, 'index.html'), 'utf-8');
+          const template = await vite.transformIndexHtml(req.originalUrl, rawTemplate);
+
+          const renderedHtml = template
+            .replace(/<title>.*?<\/title>/i, `<title>${pageData.title}</title>`)
+            .replace(/<meta name="title" content=".*?" \/>/i, `<meta name="title" content="${pageData.title}" />`)
+            .replace(/<meta name="description" content=".*?" \/>/i, `<meta name="description" content="${pageData.metaDescription}" />`)
+            .replace(/<link rel="canonical" href=".*?" \/>/i, `<link rel="canonical" href="https://squardwar.site${pageData.path}" />`)
+            .replace(/<meta property="og:title" content=".*?" \/>/i, `<meta property="og:title" content="${pageData.title}" />`)
+            .replace(/<meta property="og:description" content=".*?" \/>/i, `<meta property="og:description" content="${pageData.metaDescription}" />`)
+            .replace(/<meta property="og:url" content=".*?" \/>/i, `<meta property="og:url" content="https://squardwar.site${pageData.path}" />`)
+            .replace(/<meta name="twitter:title" content=".*?" \/>/i, `<meta name="twitter:title" content="${pageData.title}" />`)
+            .replace(/<meta name="twitter:description" content=".*?" \/>/i, `<meta name="twitter:description" content="${pageData.metaDescription}" />`);
+
+          res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(renderedHtml);
+        } catch (err) {
+          next(err);
+        }
+      });
+    }
+
     app.use(vite.middlewares);
   } else {
+    // Register SSR meta injection for all 10 SEO Landing Pages in production
+    for (const [slug, pageData] of Object.entries(SEO_LANDING_PAGES)) {
+      const routePath = `/${slug}`;
+      app.get(routePath, async (_req: Request, res: Response, next: NextFunction) => {
+        try {
+          const template = await fs.promises.readFile(path.resolve(__dirname, 'dist', 'index.html'), 'utf-8');
+          const renderedHtml = template
+            .replace(/<title>.*?<\/title>/i, `<title>${pageData.title}</title>`)
+            .replace(/<meta name="title" content=".*?" \/>/i, `<meta name="title" content="${pageData.title}" />`)
+            .replace(/<meta name="description" content=".*?" \/>/i, `<meta name="description" content="${pageData.metaDescription}" />`)
+            .replace(/<link rel="canonical" href=".*?" \/>/i, `<link rel="canonical" href="https://squardwar.site${pageData.path}" />`)
+            .replace(/<meta property="og:title" content=".*?" \/>/i, `<meta property="og:title" content="${pageData.title}" />`)
+            .replace(/<meta property="og:description" content=".*?" \/>/i, `<meta property="og:description" content="${pageData.metaDescription}" />`)
+            .replace(/<meta property="og:url" content=".*?" \/>/i, `<meta property="og:url" content="https://squardwar.site${pageData.path}" />`)
+            .replace(/<meta name="twitter:title" content=".*?" \/>/i, `<meta name="twitter:title" content="${pageData.title}" />`)
+            .replace(/<meta name="twitter:description" content=".*?" \/>/i, `<meta name="twitter:description" content="${pageData.metaDescription}" />`);
+
+          res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(renderedHtml);
+        } catch (err) {
+          next(err);
+        }
+      });
+    }
+
     // Serve static files in production
     app.use(express.static(path.resolve(__dirname, 'dist')));
     app.get('*', (_req, res) => {
