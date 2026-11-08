@@ -69,6 +69,24 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
     }
     canonical.setAttribute('href', `https://squardwar.site${pageData.path}`);
 
+    // Update or insert Google Search mobile thumbnail meta
+    let thumbMeta = document.querySelector('meta[name="thumbnail"]');
+    if (!thumbMeta) {
+      thumbMeta = document.createElement('meta');
+      thumbMeta.setAttribute('name', 'thumbnail');
+      document.head.appendChild(thumbMeta);
+    }
+    thumbMeta.setAttribute('content', 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png');
+
+    // Update or insert image_src link
+    let imageSrcLink = document.querySelector('link[rel="image_src"]');
+    if (!imageSrcLink) {
+      imageSrcLink = document.createElement('link');
+      imageSrcLink.setAttribute('rel', 'image_src');
+      document.head.appendChild(imageSrcLink);
+    }
+    imageSrcLink.setAttribute('href', 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png');
+
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [pageData]);
@@ -116,6 +134,16 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
             'item': crumb.url
           }))
         },
+        'primaryImageOfPage': {
+          '@type': 'ImageObject',
+          '@id': `https://squardwar.site${pageData.path}#primaryimage`,
+          'url': 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
+          'contentUrl': 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
+          'width': 1200,
+          'height': 675,
+          'caption': `${pageData.title} – Erangel Squad Tournament Match`
+        },
+        'image': 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
         'inLanguage': 'en-US',
         'datePublished': pageData.publishedDate,
         'dateModified': pageData.modifiedDate

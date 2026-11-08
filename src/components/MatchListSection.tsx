@@ -87,9 +87,15 @@ export const MatchListSection: React.FC<MatchListSectionProps> = ({
         <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] max-h-[420px] overflow-hidden bg-black">
           <img 
             src={MATCH_IMAGES.ERANGEL} 
-            alt="Erangel Tournament Poster"
+            alt="SquardWar PUBG Mobile Erangel Squad Tournament Match"
+            title="SquardWar PUBG Mobile Erangel Squad Tournament Match"
+            itemProp="image"
+            data-google-thumbnail="true"
+            width={1200}
+            height={675}
             className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-500"
             loading="eager"
+            fetchPriority="high"
           />
         </div>
 
