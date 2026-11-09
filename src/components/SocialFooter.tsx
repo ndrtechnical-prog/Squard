@@ -334,31 +334,6 @@ export const SocialFooter: React.FC<SocialFooterProps> = ({ onNavigate }) => {
           </span>
         </div>
 
-        {/* SEO Internal Link Directory (Crawlable HTML Links for Search Engines) */}
-        <div className="max-w-4xl mx-auto px-3.5 pt-3 pb-3 border-b border-[#1b120c]">
-          <div className="text-[10px] uppercase font-mono font-bold tracking-wider text-amber-400/70 mb-2 text-center sm:text-left flex items-center justify-center sm:justify-start gap-1.5">
-            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-            <span>Official Tournament Guides &amp; Regional Hubs:</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 text-[11px] sm:text-xs">
-            {SEO_FOOTER_PAGES.map((p) => (
-              <a
-                key={p.path}
-                href={p.path}
-                onClick={(e) => handleLinkClick(p.path, e)}
-                className="px-2 py-1.5 rounded-lg bg-[#140c07] hover:bg-amber-950/40 border border-amber-900/30 hover:border-amber-500/50 text-amber-200/75 hover:text-amber-100 transition-colors flex items-center justify-between group"
-              >
-                <span className="truncate group-hover:underline underline-offset-2">
-                  {p.name}
-                </span>
-                <span className="text-[9px] font-mono text-amber-500/60 shrink-0 ml-1">
-                  {p.badge}
-                </span>
-              </a>
-            ))}
-          </div>
-        </div>
-
         {/* 3 Minimal Clean Lines Container */}
         <div className="max-w-4xl mx-auto px-3 py-3 space-y-2 text-center">
           

@@ -5,9 +5,12 @@ import {
   ShieldCheck, 
   LogOut, 
   User, 
-  RefreshCw 
+  RefreshCw,
+  BookOpen,
+  ChevronRight
 } from 'lucide-react';
 import { Tournament } from '../types/tournament';
+import { SEO_FOOTER_PAGES } from './SocialFooter';
 
 interface DrawerMenuProps {
   isOpen: boolean;
@@ -20,6 +23,7 @@ interface DrawerMenuProps {
   onOpenAdmin: () => void;
   onClearPubgId: () => void;
   onEditPubgId: () => void;
+  onNavigate?: (path: string) => void;
 }
 
 export const DrawerMenu: React.FC<DrawerMenuProps> = ({
@@ -32,7 +36,8 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
   onOpenResults,
   onOpenAdmin,
   onClearPubgId,
-  onEditPubgId
+  onEditPubgId,
+  onNavigate
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
@@ -168,6 +173,36 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Tournament Guides & Regional Hubs Menu Links */}
+          <div className="space-y-2 pt-3 border-t border-amber-950/50">
+            <div className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-amber-400 uppercase tracking-wider font-heading">
+              <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Tournament Guides &amp; Hubs</span>
+            </div>
+            <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+              {SEO_FOOTER_PAGES.map((page) => (
+                <a
+                  key={page.path}
+                  href={page.path}
+                  onClick={(e) => {
+                    if (onNavigate && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                      e.preventDefault();
+                      onClose();
+                      onNavigate(page.path);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl bg-[#18100a] hover:bg-amber-950/50 border border-amber-900/30 hover:border-amber-500/50 flex items-center justify-between text-xs text-amber-200/80 hover:text-white transition-all group cursor-pointer"
+                >
+                  <span className="truncate group-hover:underline">{page.name}</span>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <span className="text-[9.5px] font-mono text-amber-500/70">{page.badge}</span>
+                    <ChevronRight className="w-3 h-3 text-amber-500/50 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -12,7 +12,7 @@ export const OFFICIAL_PAYMENT_INFO = {
 };
 
 export const MATCH_IMAGES = {
-  ERANGEL: 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
+  ERANGEL: '/images/erangel_squad_tournament.jpg',
   LIVIK: 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_0000000076e081f78464dd659a240b41.png',
   TDM: 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000560881f4be40c9c8b3189a56.png',
   FREE_FIRE: 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/images%20(6).jpeg'

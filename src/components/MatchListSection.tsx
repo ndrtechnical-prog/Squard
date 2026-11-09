@@ -76,6 +76,21 @@ export const MatchListSection: React.FC<MatchListSectionProps> = ({
 
   return (
     <div className="w-full space-y-5 my-3 animate-in fade-in-50 duration-200">
+      {/* Sleek Compact Header (Ultra-Clean, Zero Clutter) */}
+      <div className="flex items-center justify-between px-1 -mb-1.5">
+        <h1 className="text-[11px] sm:text-xs font-mono font-bold uppercase tracking-wider text-amber-400/90 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span>PUBG Tournaments</span>
+          <span className="text-amber-500/30">•</span>
+          <span>PUBG Esports</span>
+          <span className="text-amber-500/30">•</span>
+          <span>Free Fire Tournaments</span>
+        </h1>
+        <span className="text-[10px] font-mono text-amber-500/50 hidden sm:inline">
+          Official Custom Rooms
+        </span>
+      </div>
+
       {/* =========================================================================
           MATCH 1: ERANGEL SQUAD MATCH
          ========================================================================= */}

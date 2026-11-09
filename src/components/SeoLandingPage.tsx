@@ -76,7 +76,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
       thumbMeta.setAttribute('name', 'thumbnail');
       document.head.appendChild(thumbMeta);
     }
-    thumbMeta.setAttribute('content', 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png');
+    thumbMeta.setAttribute('content', 'https://squardwar.site/images/erangel_squad_tournament.jpg');
 
     // Update or insert image_src link
     let imageSrcLink = document.querySelector('link[rel="image_src"]');
@@ -85,7 +85,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
       imageSrcLink.setAttribute('rel', 'image_src');
       document.head.appendChild(imageSrcLink);
     }
-    imageSrcLink.setAttribute('href', 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png');
+    imageSrcLink.setAttribute('href', 'https://squardwar.site/images/erangel_squad_tournament.jpg');
 
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -137,13 +137,13 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
         'primaryImageOfPage': {
           '@type': 'ImageObject',
           '@id': `https://squardwar.site${pageData.path}#primaryimage`,
-          'url': 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
-          'contentUrl': 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
+          'url': 'https://squardwar.site/images/erangel_squad_tournament.jpg',
+          'contentUrl': 'https://squardwar.site/images/erangel_squad_tournament.jpg',
           'width': 1200,
           'height': 675,
           'caption': `${pageData.title} – Erangel Squad Tournament Match`
         },
-        'image': 'https://pub-f2dfd2610ba84b708d63b5ff463d0490.r2.dev/Images/file_00000000afa4820a999d77e1bf565969.png',
+        'image': 'https://squardwar.site/images/erangel_squad_tournament.jpg',
         'inLanguage': 'en-US',
         'datePublished': pageData.publishedDate,
         'dateModified': pageData.modifiedDate

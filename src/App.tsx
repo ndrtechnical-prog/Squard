@@ -1421,6 +1421,7 @@ export default function App() {
         onOpenAdmin={() => openWithHistory(() => setIsAdminOpen(true))}
         onClearPubgId={handleClearPubgId}
         onEditPubgId={handleEditPubgId}
+        onNavigate={navigateTo}
       />
 
       {/* Easypaisa-style features modal (REWARD, NOTICES, REVIEWS) */}
