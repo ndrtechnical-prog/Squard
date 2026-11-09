@@ -323,16 +323,7 @@ export const SocialFooter: React.FC<SocialFooterProps> = ({ onNavigate }) => {
       {/* Google Mobile-Style Minimal 3-Line Bottom Footer */}
       <footer className="w-full mt-6 bg-[#0f0b08] border-t border-[#251b14] text-[#9aa0a6] font-sans antialiased relative z-10 select-none">
         
-        {/* Top Location Bar (Google Mobile "Pakistan" style) */}
-        <div className="max-w-4xl mx-auto px-4 py-2.5 sm:py-3 border-b border-[#211710] flex items-center justify-between text-xs sm:text-[13px] text-amber-200/60 font-medium">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            <span className="text-amber-100 font-semibold tracking-wide">Pakistan</span>
-          </div>
-          <span className="text-[11px] text-amber-400/60 font-mono">
-            SquardWar Official Esports Portal
-          </span>
-        </div>
+
 
         {/* 3 Minimal Clean Lines Container */}
         <div className="max-w-4xl mx-auto px-3 py-3 space-y-2 text-center">

@@ -90,6 +90,14 @@ export const DrawerMenu: React.FC<DrawerMenuProps> = ({
               <X className="w-4 h-4" />
             </button>
           </div>
+          
+          {/* Location Bar */}
+          <div className="flex items-center gap-2 text-[11px] text-amber-400/70 py-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+            <span>Pakistan</span>
+            <span className="text-amber-800">•</span>
+            <span>Official Esports Portal</span>
+          </div>
 
           {/* Player Profile & Account Card */}
           <div className="space-y-3.5 animate-in fade-in duration-150">
