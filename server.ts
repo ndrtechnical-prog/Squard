@@ -7,6 +7,17 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { SEO_LANDING_PAGES } from './src/data/seoLandingPages.ts';
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
 import type { 
   Tournament, 
   Booking, 
@@ -35,6 +46,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Ndr@77490869';
 const JWT_SECRET = process.env.JWT_SECRET || 'pubg-super-secret-key-2026';
@@ -807,6 +819,36 @@ Disallow: /api/
 Sitemap: ${domain}/sitemap.xml
 `);
 });
+
+// TTS Endpoint
+app.post('/api/tts', async (req: Request, res: Response) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'Text is required' });
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash-lite-tts",
+      contents: [{ role: "user", parts: [{ text }] }],
+      config: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: "Kore" },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error('No audio generated');
+    
+    res.json({ audio: base64Audio });
+  } catch (err) {
+    console.error('TTS error:', err);
+    res.status(500).json({ error: 'Failed to generate audio' });
+  }
+});
+
 
 // 1. Get Tournament State & Seats
 app.get('/api/tournament', (req: Request, res: Response) => {

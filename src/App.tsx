@@ -33,10 +33,12 @@ import {
   MATCH_IMAGES
 } from './utils/storage';
 import { Sparkles, ArrowLeft } from 'lucide-react';
+import { speakUrdu } from './utils/voiceGuide';
 
 export default function App() {
   const [activeGame, setActiveGame] = useState<GameType>('PUBG');
   const [selectedMatch, setSelectedMatch] = useState<PubgMatchId | 'FREE_FIRE' | null>(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   // Active client-side path for SEO landing pages & smooth in-app navigation
   const [currentPath, setCurrentPath] = useState<string>(() => {
@@ -46,13 +48,39 @@ export default function App() {
     return '/';
   });
 
+  // Voice guidance state
+  const [hasInteracted, setHasInteracted] = useState(false);
+
   useEffect(() => {
     const handlePopState = () => {
       setCurrentPath(window.location.pathname || '/');
     };
     window.addEventListener('popstate', handlePopState);
+    
+    // Step 1: Welcome / Match Selection
+    const triggerWelcome = () => {
+      speakUrdu('Welcome! Sabse pehle apna match select karein.');
+      window.removeEventListener('click', triggerWelcome);
+      setHasInteracted(true);
+    };
+    window.addEventListener('click', triggerWelcome, { once: true });
+    
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Step 2: Seat Booking
+  useEffect(() => {
+    if (selectedMatch && hasInteracted) {
+      speakUrdu('Bohat khoob! Ab apne squad k sath UID enter kar k seat book karein.');
+    }
+  }, [selectedMatch, hasInteracted]);
+
+  // Step 3: Success
+  useEffect(() => {
+    if (isSuccessModalOpen && hasInteracted) {
+      speakUrdu('Mubarak ho! Aapki seat book ho gayi hai.');
+    }
+  }, [isSuccessModalOpen, hasInteracted]);
 
   const navigateTo = useCallback((targetPath: string) => {
     const cleanPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
@@ -62,6 +90,7 @@ export default function App() {
     setCurrentPath(cleanPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+
 
   const currentSlug = currentPath.replace(/^\//, '').split('?')[0].split('#')[0];
   const activeSeoPage = SEO_LANDING_PAGES[currentSlug] || null;
@@ -175,7 +204,6 @@ export default function App() {
   const [bookingSeat, setBookingSeat] = useState(1);
 
   const [recentBooking, setRecentBooking] = useState<any>(null);
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(() => {
